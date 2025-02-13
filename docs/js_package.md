@@ -103,7 +103,7 @@ on:
 
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/ci_js_package.yml@v1.0.0
+    uses: PedroHenriques/ci_cd_templates/.github/workflows/ci_js_package.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
@@ -123,7 +123,7 @@ With this directory structure:
 - The services that require building a package are `package1` and `package2`, since they have a build file (input `build_file_pattern`)
 - The `sharedLibs` service is not deployable nor buildable, but is a custom service since it has a custom service file (input `custom_service_file_pattern`)
 
-This will trigger the `ci_js_package.yml` (on the tag `v1.0.0`) template when
+This will trigger the `ci_js_package.yml` (on the tag `v1`) template when
 - a `pull request` is opened, edited, reopened, synchronized or closed
 
 The behaviour for the pipeline is:

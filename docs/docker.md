@@ -167,7 +167,7 @@ on:
       - 'main'
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/ci_docker.yml@v1.0.0
+    uses: PedroHenriques/ci_cd_templates/.github/workflows/ci_docker.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
@@ -180,7 +180,7 @@ jobs:
   cd-dev:
     needs: ci
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1.0.0
+    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1
     with:
       environment: "dev"
       source_dir_name: 'src'
@@ -193,7 +193,7 @@ jobs:
   cd-qa:
     needs: [ci, cd-dev]
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1.0.0
+    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1
     with:
       environment: "qua"
       source_dir_name: 'src'
@@ -206,7 +206,7 @@ jobs:
   cd-prd:
     needs: [ci, cd-qa]
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1.0.0
+    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1
     with:
       environment: "prd"
       source_dir_name: 'src'
@@ -223,7 +223,7 @@ With this directory structure:
 - The services that require building Docker images are `Notification`, `Identity`, since they have a build file (input `build_file_pattern`)
 - The `SharedLibs` service is not deployable nor buildable, but is a custom service since it has a custom service file (input `custom_service_file_pattern`)
 
-This will trigger the `ci_docker.yml` (on the tag `v1.0.0`) template when
+This will trigger the `ci_docker.yml` (on the tag `v1`) template when
 - a `pull request` is opened, edited, reopened or synchronized
 - a `push` is made to the branch `main`
 
