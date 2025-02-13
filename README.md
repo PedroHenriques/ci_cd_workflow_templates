@@ -72,7 +72,7 @@ If you use a template and specify the directory `src` as the "source directory" 
 
 ## Available templates
 
-| Build Artifact Type | When to use | Documentation |
-| ----------- | ----------- | ----------- |
-| Docker | Use these templates if your application requires building and deploying Docker images | [doc](/docs/docker.md) |
-| Javascript Package | Use these templates if your application requires building and deploying JS packages to a package manager | [doc](/docs/js_package.md) |
+| Build Artifact Type | When to use | Versions | Documentation |
+| ----------- | ----------- | ----------- | ----------- |
+| Docker | Use these templates if your application requires building and deploying Docker images | `@main`<br>`@v1` | [doc](/docs/docker.md) |
+| Javascript Package | Use these templates if your application requires building and deploying JS packages to a package manager | `@main`<br>`@v1` | [doc](/docs/js_package.md) |
