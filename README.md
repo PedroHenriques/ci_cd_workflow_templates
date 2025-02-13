@@ -32,7 +32,7 @@ In order to use these templates your application repository needs to comply with
 
 This directory, at the root of your repository, will contain shell scripts that the templates will invoke at various stages of the CI/CD pipeline.
 
-More information on the expected scripts in each template's [documentation]((#available-templates)).
+More information on the expected scripts in each template's [documentation](#available-templates).
 
 ### Services
 
