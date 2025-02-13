@@ -167,7 +167,7 @@ on:
       - 'main'
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/ci_docker.yml@v1
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/ci_docker.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
@@ -180,7 +180,7 @@ jobs:
   cd-dev:
     needs: ci
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/cd_docker.yml@v1
     with:
       environment: "dev"
       source_dir_name: 'src'
@@ -193,7 +193,7 @@ jobs:
   cd-qa:
     needs: [ci, cd-dev]
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/cd_docker.yml@v1
     with:
       environment: "qua"
       source_dir_name: 'src'
@@ -206,7 +206,7 @@ jobs:
   cd-prd:
     needs: [ci, cd-qa]
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    uses: PedroHenriques/ci_cd_templates/.github/workflows/cd_docker.yml@v1
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/cd_docker.yml@v1
     with:
       environment: "prd"
       source_dir_name: 'src'
