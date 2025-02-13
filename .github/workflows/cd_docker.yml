@@ -1,0 +1,168 @@
+name: cd_docker
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Github environment to deploy to"
+      source_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, relative to the repo's root, where the directories with source code of the service(s) is located"
+      manifest_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, inside each service, where the manifest files are located"
+      custom_service_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service as a custom service"
+      build_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+      img_tag:
+        required: true
+        type: string
+        description: "Tag of the Docker images of the services that will be deployed"
+jobs:
+  categorize-changed-services:
+    uses: ./.github/workflows/categorize-changed-services.yml
+    with:
+      environment: ${{ inputs.environment }}
+      source_dir_name: ${{ inputs.source_dir_name }}
+      deployment_file-or-dir_path: ${{ inputs.manifest_dir_name }}
+      custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
+      build_file_pattern: ${{ inputs.build_file_pattern }}
+
+  build-and-commit-manifests:
+    needs: categorize-changed-services
+    if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY != '' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      SERVICES_TO_DEPLOY: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY }}
+      IMG_TAG: ${{ inputs.img_tag }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      NAMESPACE: ${{ vars.PROJECT_NAME }}
+      SRC_DIR: ${{ inputs.source_dir_name }}
+      MANIFEST_DIR: ${{ inputs.manifest_dir_name }}
+      IDP_REPO_REL_PATH: 'idp_repo_clone' # Needs to be the same as the 'steps.Clone IDP repo.with.path' property
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Clone IDP repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.IDP_REPO_NAME }}
+          token: ${{ secrets.IDP_REPO_TOKEN }}
+          path: 'idp_repo_clone' # Needs to be the same as the 'jobs.build-and-commit-manifests.env.IDP_REPO_REL_PATH' property
+
+      - name: Prepare IDP repo clone
+        id: prepare-idp-repo-clone
+        run: >-
+          BRANCH_NAME="${{ vars.PROJECT_NAME }}-$(git rev-parse --short HEAD)";
+          IDP_APP_PATH="${GITHUB_WORKSPACE}/${IDP_REPO_REL_PATH}/base/app/${{ vars.PROJECT_NAME }}";
+
+          cd "${GITHUB_WORKSPACE}/${IDP_REPO_REL_PATH}/";
+          git config user.name github-actions[bot];
+          git config user.email github-actions[bot]@users.noreply.github.com;
+          git checkout -b ${BRANCH_NAME};
+          git pull origin ${BRANCH_NAME} || true;
+
+          mkdir -p "${IDP_APP_PATH}";
+
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> "$GITHUB_OUTPUT";
+          echo "IDP_APP_PATH=${IDP_APP_PATH}" >> "$GITHUB_OUTPUT";
+
+      - name: Install kubeseal
+        uses: digitalservicebund/setup-kubeseal@v1.0.0
+        with:
+          version: 0.26.0
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+      - name: Get public key from cluster
+        id: get-public-key-from-cluster
+        run: >-
+          az aks get-credentials --resource-group ${{ vars.AKS_RG_NAME }} --name ${{ vars.AKS_CLUSTER_NAME }};
+          az aks install-cli;
+          kubelogin convert-kubeconfig -l azurecli;
+
+          PUB_SEALED_SECRETS_PEM_PATH="pub-sealed-secrets.pem";
+          kubeseal --context $(kubectl config current-context) --controller-namespace ${{ vars.SEALED_SECRET_CTRL_NAMESPACE }} --controller-name ${{ vars.SEALED_SECRET_CTRL_NAME }} --fetch-cert > ${PUB_SEALED_SECRETS_PEM_PATH};
+          echo "PUB_SEALED_SECRETS_PEM_PATH=${PUB_SEALED_SECRETS_PEM_PATH}" >> "$GITHUB_OUTPUT";
+
+      - name: Build manifest files
+        env:
+          ${{ insert }}: ${{ vars }}
+          ${{ insert }}: ${{ secrets }}
+        run: >-
+          IDP_APP_PATH="${{ steps.prepare-idp-repo-clone.outputs.IDP_APP_PATH }}";
+
+          KUSTOMIZATION_APP_FILE_PATH="${IDP_APP_PATH}/kustomization.yaml";
+          if [ -f "${KUSTOMIZATION_APP_FILE_PATH}" ]; then
+            echo "Application 'kustomization.yaml' already exists.";
+          else
+            echo "Application 'kustomization.yaml' doesn't exist. Creating it.";
+            printf -- "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n" > ${KUSTOMIZATION_APP_FILE_PATH};
+          fi
+
+          SERVICES=(${SERVICES_TO_DEPLOY//./ });
+          for service in ${SERVICES[@]}; do
+            export SERVICE=${service};
+
+            mkdir -p "${IDP_APP_PATH}/${service}";
+            if grep -Fxq -- "- ${service}" "${KUSTOMIZATION_APP_FILE_PATH}"; then
+              echo "Service '${service}' already exists in application 'kustomization.yaml'.";
+            else
+              echo "Service '${service}' doesn't exist in application 'kustomization.yaml'. Adding it.";
+              printf -- "- ${service}\n" >> ${KUSTOMIZATION_APP_FILE_PATH};
+            fi
+
+            KUSTOMIZATION_APP_SERVICE_PATH="${IDP_APP_PATH}/${service}/kustomization.yaml";
+            printf -- "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n" > ${KUSTOMIZATION_APP_SERVICE_PATH};
+
+            IMG_NAME="${{ vars.ACR_NAME }}.azurecr.io/${{ vars.ACR_REPO_NAME }}/${{ vars.PROJECT_NAME }}_${service}:${IMG_TAG}";
+            export IMG_NAME;
+
+            for file in $(find "${SRC_DIR}/${service}/${MANIFEST_DIR}" -maxdepth 1 -type f); do
+              echo "Processing file: ${file}";
+
+              FILE_NAME=${file#*/*/*/};
+              envsubst < $file > "${IDP_APP_PATH}/${service}/${FILE_NAME}";
+              printf -- "- ${FILE_NAME}\n" >> ${KUSTOMIZATION_APP_SERVICE_PATH};
+
+              if grep -Fxq -- "kind: Secret" "${file}"; then
+                echo "Processing file '${file}' as a secret.";
+                kubeseal -o yaml --controller-namespace ${{ vars.SEALED_SECRET_CTRL_NAMESPACE }} --controller-name ${{ vars.SEALED_SECRET_CTRL_NAME }} --cert=${{ steps.get-public-key-from-cluster.outputs.PUB_SEALED_SECRETS_PEM_PATH }} < "${IDP_APP_PATH}/${service}/${FILE_NAME}" > "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}";
+                mv "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}" "${IDP_APP_PATH}/${service}/${FILE_NAME}";
+              fi
+            done
+          done
+
+      - name: Open PR in IDP repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.IDP_REPO_TOKEN }}
+          BRANCH_NAME: ${{ steps.prepare-idp-repo-clone.outputs.BRANCH_NAME }}
+        run: >-
+          cd "${GITHUB_WORKSPACE}/${IDP_REPO_REL_PATH}/";
+          git add .;
+          git commit -m "Commit from the CD workflow of the project '${{ vars.PROJECT_NAME }}'." || true;
+          git push origin ${BRANCH_NAME};
+
+          PR_TITLE="Deploy for the project '${{ vars.PROJECT_NAME }}'";
+          PR_BODY="PR from CD workflow of the project '${{ vars.PROJECT_NAME }}'.";
+
+          PR_LIST=$(gh pr list -B main -H ${BRANCH_NAME} -S "is:open ${PR_TITLE} in:title");
+          if [[ "${PR_LIST}" == "" ]]; then
+            echo "No opened PR exists between the branches 'main' and '${BRANCH_NAME}' with the title '${PR_TITLE}'. Creating a PR.";
+            gh pr create -B main -H ${BRANCH_NAME} --title "${PR_TITLE}" --body "${PR_BODY}";
+          else
+            echo "A PR already exists between the branches 'main' and '${BRANCH_NAME}'.";
+          fi

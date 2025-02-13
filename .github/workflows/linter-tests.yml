@@ -1,0 +1,38 @@
+name: linter-tests
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        description: "Github environment to deploy to"
+        required: true
+
+jobs:
+  linter-and-tests:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Run project linter
+        run: if [ -f "./cli/lint.sh" ]; then sh cli/lint.sh --cicd; else echo "No lint.sh file found."; fi
+      
+      - name: Run unit tests
+        run: if [ -f "./cli/test.sh" ]; then sh cli/test.sh --unit --cicd; else echo "No test.sh file found."; fi
+
+      - name: Run integration tests
+        run: if [ -f "./cli/test.sh" ]; then sh cli/test.sh --integration --cicd; else echo "No test.sh file found."; fi
+
+      - name: Run E2E tests
+        run: if [ -f "./cli/test.sh" ]; then sh cli/test.sh --e2e --cicd; else echo "No test.sh file found."; fi
+
+      - name: Run test coverage
+        run: if [ -f "./cli/coverage.sh" ]; then sh cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
+
+      # - name: Push test coverage to remote
+      #   uses: coverallsapp/github-action@master
+      #   with:
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     path-to-lcov: "./coverage/coverage.lcov"
+      #     flag-name: "unit"

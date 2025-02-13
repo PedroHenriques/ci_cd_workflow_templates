@@ -1,0 +1,124 @@
+name: categorize-changed-services
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        description: "Github environment to deploy to"
+        required: true
+      source_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, relative to the repo's root, where the directories with source code of the service(s) is located"
+      deployment_file-or-dir_path:
+        required: true
+        type: string
+        description: "Path of the file or directory, inside each service, that identifies the service as a deployable service"
+      custom_service_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service as a custom service"
+      build_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+    outputs:
+      SERVICES_TO_DEPLOY:
+        description: "Whitespace separated list of services to deploy"
+        value: ${{ jobs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY }}
+      SERVICES_TO_BUILD:
+        description: "Whitespace separated list of services to build"
+        value: ${{ jobs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+
+jobs:
+  categorize-changed-services:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      SERVICES_TO_DEPLOY: ${{ steps.services-to-deploy-and-build.outputs.SERVICES_TO_DEPLOY }}
+      SERVICES_TO_BUILD: ${{ steps.services-to-deploy-and-build.outputs.SERVICES_TO_BUILD }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          separator: ','
+          files: ${{ inputs.source_dir_name }}/**
+      
+      - name: Identify the services to deploy and to build
+        id: services-to-deploy-and-build
+        env:
+          SRC_DIR: ${{ inputs.source_dir_name }}
+          DEPLOYMENT_FILE_DIR_PATH: ${{ inputs.deployment_file-or-dir_path }}
+          CUSTOM_SERVICE_FILE_PATTERN: ${{ inputs.custom_service_file_pattern }}
+          BUILD_FILE_PATTERN: ${{ inputs.build_file_pattern }}
+        run: >-
+          IFS=$',' read -a ALL_CHANGED_FILES <<< "${{ steps.changed-files.outputs.all_changed_files }}";
+
+          SERVICES_TO_DEPLOY=();
+          SERVICES_TO_BUILD=();
+          DEPLOY_ALL_CUSTOM=0;
+
+          for file in "${ALL_CHANGED_FILES[@]}"; do
+            echo "'${file}' was changed";
+
+            SERVICE_PATH_TMP=${file#*/};
+            SERVICE_NAME=${SERVICE_PATH_TMP%%/*};
+            
+            if [ -e "${SRC_DIR}/${SERVICE_NAME}/${DEPLOYMENT_FILE_DIR_PATH}" ]; then
+              SERVICES_TO_DEPLOY+=(${SERVICE_NAME});
+
+              FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${BUILD_FILE_PATTERN}" | wc -l);
+              if [ ${FILE_COUNT} -gt 0 ]; then
+                SERVICES_TO_BUILD+=(${SERVICE_NAME});
+              else
+                echo "No '${BUILD_FILE_PATTERN}' found for the service '${SERVICE_NAME}'";
+              fi
+            else
+              echo "No deployment files found for the service '${SERVICE_NAME}'";
+
+              FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${CUSTOM_SERVICE_FILE_PATTERN}" | wc -l);
+              if [ ${FILE_COUNT} -gt 0 ]; then
+                DEPLOY_ALL_CUSTOM=1;
+              else
+                echo "No '${CUSTOM_SERVICE_FILE_PATTERN}' found for the service '${SERVICE_NAME}'";
+              fi
+            fi
+          done
+
+          if [ ${DEPLOY_ALL_CUSTOM} -eq 1 ]; then
+            echo "Some changed custom services are not deployable (don't have a manifest files). Treating them as shared libs and deploying all custom services.";
+
+            for path in $(find ${SRC_DIR} -maxdepth 1 -mindepth 1 -type d); do
+              echo "Found path: ${path}";
+              SERVICE_NAME=${path#*/};
+
+              if [ -e "${path}/${DEPLOYMENT_FILE_DIR_PATH}" ]; then
+                FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${CUSTOM_SERVICE_FILE_PATTERN}" | wc -l);
+                if [ ${FILE_COUNT} -gt 0 ]; then
+                  SERVICES_TO_DEPLOY+=(${SERVICE_NAME});
+
+                  FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${BUILD_FILE_PATTERN}" | wc -l);
+                  if [ ${FILE_COUNT} -gt 0 ]; then
+                    SERVICES_TO_BUILD+=(${SERVICE_NAME});
+                  else
+                    echo "No '${BUILD_FILE_PATTERN}' for the service '${SERVICE_NAME}'";
+                  fi
+                fi
+              else
+                echo "No deployment files found for the service '${SERVICE_NAME}'";
+              fi
+            done
+          fi
+
+          SERVICES_TO_DEPLOY=($(for service in "${SERVICES_TO_DEPLOY[@]}"; do echo "${service}"; done | sort -u));
+          SERVICES_TO_BUILD=($(for service in "${SERVICES_TO_BUILD[@]}"; do echo "${service}"; done | sort -u));
+
+          echo "Services to deploy: ${SERVICES_TO_DEPLOY[@]}";
+          echo "Services to build: ${SERVICES_TO_BUILD[@]}";
+
+          echo "SERVICES_TO_DEPLOY=${SERVICES_TO_DEPLOY[@]}" >> "$GITHUB_OUTPUT";
+          echo "SERVICES_TO_BUILD=${SERVICES_TO_BUILD[@]}" >> "$GITHUB_OUTPUT";

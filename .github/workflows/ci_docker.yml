@@ -1,0 +1,93 @@
+name: ci_docker
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Github environment to deploy to"
+      deployable_branch_name:
+        required: true
+        type: string
+        description: "Name of the branch that will trigger a deployment"
+      source_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, relative to the repo's root, where the directories with source code of the service(s) is located"
+      manifest_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, inside each service, where the manifest files are located"
+      custom_service_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service as a custom service"
+      build_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+    outputs:
+      img_tag:
+        description: "The tag of the pushed images"
+        value: ${{ jobs.build-and-push.outputs.IMG_TAG }}
+jobs:
+  linter-and-tests:
+    uses: ./.github/workflows/linter-tests.yml
+    with:
+      environment: ${{ inputs.environment }}
+
+  categorize-changed-services:
+    needs: linter-and-tests
+    if: ${{ github.event_name == 'push' && github.ref_name == inputs.deployable_branch_name }}
+    uses: ./.github/workflows/categorize-changed-services.yml
+    with:
+      environment: ${{ inputs.environment }}
+      source_dir_name: ${{ inputs.source_dir_name }}
+      deployment_file-or-dir_path: ${{ inputs.manifest_dir_name }}
+      custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
+      build_file_pattern: ${{ inputs.build_file_pattern }}
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: categorize-changed-services
+    if: ${{ github.event_name == 'push' && github.ref_name == inputs.deployable_branch_name && needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' }}
+    environment: ${{ inputs.environment }}
+    outputs:
+      IMG_TAG: ${{ steps.build-artifacts.outputs.IMG_TAG }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Build artifacts
+        id: build-artifacts
+        env:
+          SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+        run: >-
+          SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');
+          IMG_TAG=$(git rev-parse --short HEAD);
+          
+          sh cli/build.sh --cicd --tag ${IMG_TAG} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
+
+          echo "IMG_TAG=${IMG_TAG}" >> "$GITHUB_OUTPUT";
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+      - name: Push Docker build artifacts
+        env:
+          SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+          IMG_TAG: ${{ steps.build-artifacts.outputs.IMG_TAG }}
+        run: >-
+          az acr login --name ${{ vars.ACR_NAME }};
+
+          SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');
+          for service in ${SERVICES_TO_BUILD[@]}; do
+            echo "Pushing '${service}' service";
+            IMAGE_NAME="${{ vars.PROJECT_NAME }}_${service}";
+            IMAGE_REMOTE_NAME="${{ vars.ACR_NAME }}.azurecr.io/${{ vars.ACR_REPO_NAME }}/${IMAGE_NAME}:${IMG_TAG}";
+
+            docker image tag "${IMAGE_NAME}:${IMG_TAG}" "${IMAGE_REMOTE_NAME}";
+            docker push ${IMAGE_REMOTE_NAME};
+          done
