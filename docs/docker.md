@@ -8,13 +8,14 @@ The CI template will:
 - Run static code analysis, on every trigger of the workflow
 - Run automated tests, on every trigger of the workflow
 - Run code coverage, on every trigger of the workflow
-- Build Docker images for the services that will be deployed, if the trigger of the workflow is a `push event` to the specified `deployable branch`
-- Push the Docker images that were built to an Azure Container Registry, if the trigger of the workflow is a `push event` to the specified `deployable branch`
+- Build Docker images for the services that will be deployed.<br>If the trigger of the workflow is a `push event` to the specified `deployable branch`
+- Push the Docker images that were built to an Azure Container Registry.<br>If the trigger of the workflow is a `push event` to the specified `deployable branch`
+- Prune the Azure Container Registry to keep, at maximum, the specified number of tags per image.<br>If the trigger of the workflow is a `push event` to the specified `deployable branch` and the optional `NUM_TAGS_TO_KEEP` environment variable is defined
 
 The CD template will:
 - Builds the Kubernetes manifest files, for each service that will be deployed  
 Handles encrypting secret manifests with [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets)
-- Commits the manifest files that were built to a git repository. This repository should then be connected to a mechanism that will apply the manifests to the Kubernetes cluster
+- Commits the manifest files that were built to a git repository.<br>This repository should then be connected to a mechanism that will apply the manifests to the Kubernetes cluster
 - Opens a pull request, in that git repository, to the `main` branch with the manifest files that were built
 
 ## Pre-requisites
@@ -53,24 +54,31 @@ All Docker images built should comply with the following naming convention: `<pr
 
 ### Secrets
 
-These templates require the following `secrets` to be configured in your application repository ([docs](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions))
-- `AZURE_CLIENT_ID`: A client ID with permissions to Push images to the required ACR
-- `AZURE_CLIENT_SECRET`: The client secret for the client ID
-- `AZURE_SUBSCRIPTION_ID`: The subscription ID of the ACR where the Docker images will be pushed to
-- `AZURE_TENANT_ID`: The tenant ID of the ACR where the Docker images will be pushed to
-- `IDP_REPO_TOKEN`: A personal access token (PAT) with permissions to commit and open pull requests in the git repository where the manifest files will be delivered to
+These templates expect the following `secrets` to be configured in your application repository ([docs](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions))
+
+| Name | Required | Description |
+| ----------- | ----------- | ----------- |
+| `AZURE_CLIENT_ID` | Yes | A client ID with permissions to Push images to the required ACR |
+| `AZURE_CLIENT_SECRET` | Yes | The client secret for the client ID |
+| `AZURE_SUBSCRIPTION_ID` | Yes | The subscription ID of the ACR where the Docker images will be pushed to |
+| `AZURE_TENANT_ID` | Yes | The tenant ID of the ACR where the Docker images will be pushed to |
+| `IDP_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to commit and open pull requests in the git repository where the manifest files will be delivered to |
 
 ### Environment Variables
 
-These templates require the following `env vars` to be configured in your application repository ([docs](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#creating-configuration-variables-for-a-repository))
-- `PROJECT_NAME`: The name of your project. **NOTE:** Will be used as part of the Docker image names, so it must comply with the Docker image naming convention
-- `ACR_NAME`: Name of the Azure Container Registry where the Docker images will be pushed to
-- `ACR_REPO_NAME`: Name of the Docker image repository, in the ACR, where the push will be made to
-- `IDP_REPO_NAME`: Name of the git repository where the manifest files will be delivered to (Ex: PedroHenriques/idp_dev_cluster)
-- `AKS_RG_NAME`: Name of the Azure resource group that the Azure Kubernetes Service belongs to
-- `AKS_CLUSTER_NAME`: Name of the Azure Kubernetes Service
-- `SEALED_SECRET_CTRL_NAMESPACE`: The control namespace of the Sealed Secret installed in the AKS
-- `SEALED_SECRET_CTRL_NAME`: The control name of the Sealed Secret installed in the AKS
+These templates expect the following `env vars` to be configured in your application repository ([docs](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#creating-configuration-variables-for-a-repository))
+
+| Name | Required | Description |
+| ----------- | ----------- | ----------- |
+| `PROJECT_NAME` | Yes | The name of your project.<br>**NOTE:** Will be used as part of the Docker image names, so it must comply with the Docker image naming convention |
+| `ACR_NAME` | Yes | Name of the Azure Container Registry where the Docker images will be pushed to |
+| `ACR_REPO_NAME` | Yes | Name of the Docker image repository, in the ACR, where the push will be made to |
+| `IDP_REPO_NAME` | Yes | AName of the git repository where the manifest files will be delivered to (Ex: PedroHenriques/idp_dev_cluster) |
+| `AKS_RG_NAME` | Yes | AName of the Azure resource group that the Azure Kubernetes Service belongs to |
+| `AKS_CLUSTER_NAME` | Yes | Name of the Azure Kubernetes Service |
+| `SEALED_SECRET_CTRL_NAMESPACE` | Yes | The control namespace of the Sealed Secret installed in the AKS |
+| `SEALED_SECRET_CTRL_NAME` | Yes | The control name of the Sealed Secret installed in the AKS |
+| `NUM_TAGS_TO_KEEP` | No | The number of tags, per image, to keep.<br>If present will trigger a prune of the container registry to which Docker images are being pushed, in order to keep at maximum the specified number of tags |
 
 ## CI template
 
@@ -223,10 +231,11 @@ With this directory structure:
 - The services that require building Docker images are `Notification`, `Identity`, since they have a build file (input `build_file_pattern`)
 - The `SharedLibs` service is not deployable nor buildable, but is a custom service since it has a custom service file (input `custom_service_file_pattern`)
 
-This will trigger the `ci_docker.yml` (on the tag `v1`) template when
+This will trigger the `ci_docker.yml` template (on the ref `v1`) when
 - a `pull request` is opened, edited, reopened or synchronized
 - a `push` is made to the branch `main`
 
 The behaviour for the pipeline is:
-- Changes to a deployable service (input `manifest_dir_name`) that has a Dockerfile (input `build_file_pattern`) will trigger the Docker image for that service to be built and pushed to the ACR
+- Changes to a buildable service, i.e., a service that has a Dockerfile (input `build_file_pattern`), will trigger the Docker image for that service to be built and pushed to the ACR
+- Changes to a deployable service, i.e., a service that has manifest file(s) (input `manifest_dir_name`), will trigger the manifest files for that service to be built and a pull request opened on the IDP repository
 - The `SharedLibs` service is considered a shared service, since it is not deployable and has a `.csproj` file (input `custom_service_file_pattern`), so if it has changes all deployable services will be marked for deploy (even if they had no file changes)
