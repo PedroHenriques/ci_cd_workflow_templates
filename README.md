@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repo contains a ser of Github workflow templates that can be used in your application repository without you having to worry about the details of how to make everything work.
+This repo contains a set of Github workflow templates that can be used in your application repository without you having to worry about the details of how to make everything work.
 
 There are several workflow templates available, based on the build artifacts that your application will generate and where those artifacts should be deployed to.
 
@@ -21,7 +21,7 @@ Follow these steps:
 1. [Read the pre-requisites section](#pre-requisites)
 2. [Choose the template for your use case](#available-templates)
 3. Configure your application repository with the secrets, environment variables and files required by the chosen template
-4. Add a pipeline configuration to your application repository that references the chosen template
+4. Add a pipeline configuration to your application repository that references the chosen template (examples in the documentation of each template)
 5. Run your application repository pipeline and validate that everything is working
 
 ## Pre-requisites
@@ -62,7 +62,7 @@ Assuming a repository with the following directory structure
 │   │   ├── Models
 │   │   │   ├── *
 │   ├── SharedLibs
-│   │   │   ├── *
+│   │   ├── *
 ├── node_modules
 ├── package.json
 ├── package-lock.json

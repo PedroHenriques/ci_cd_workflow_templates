@@ -5,7 +5,7 @@
 There is 1 template.
 
 The CI template will:
-- Leave a comment on the pull request explaining how to signal a deployment, if the trigger of the workflow is a `pull request opened`
+- Leave a comment on the pull request explaining how to signal a deployment.<br>If the trigger of the workflow is a `pull request opened`
 - Run static code analysis, on every trigger of the workflow
 - Run automated tests, on every trigger of the workflow
 - Run code coverage, on every trigger of the workflow
@@ -46,14 +46,20 @@ These templates will interact with the following scripts in your application rep
 
 ### Secrets
 
-These templates require the following `secrets` to be configured in your application repository ([docs](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions))
-- `OWN_REPO_TOKEN`: A personal access token (PAT) with permissions to commit and comment in pull requests in your application repository
-- `NPM_TOKEN`: A token to the NPM account where the packages will be published to
+These templates expect the following `secrets` to be configured in your application repository ([docs](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions))
+
+| Name | Required | Description |
+| ----------- | ----------- | ----------- |
+| `OWN_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to commit and comment in pull requests and to push to the deployable branches in your application repository |
+| `NPM_TOKEN` | Yes | A token to the NPM account where the packages will be published to |
 
 ### Environment Variables
 
-These templates require the following `env vars` to be configured in your application repository ([docs](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#creating-configuration-variables-for-a-repository))
-- `PROJECT_NAME`: The name of your project.
+These templates expect the following `env vars` to be configured in your application repository ([docs](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#creating-configuration-variables-for-a-repository))
+
+| Name | Required | Description |
+| ----------- | ----------- | ----------- |
+| `PROJECT_NAME` | Yes | The name of your project |
 
 ## CI template
 
@@ -123,7 +129,7 @@ With this directory structure:
 - The services that require building a package are `package1` and `package2`, since they have a build file (input `build_file_pattern`)
 - The `sharedLibs` service is not deployable nor buildable, but is a custom service since it has a custom service file (input `custom_service_file_pattern`)
 
-This will trigger the `ci_js_package.yml` (on the tag `v1`) template when
+This will trigger the `ci_js_package.yml` template (on the ref `v1`) when
 - a `pull request` is opened, edited, reopened, synchronized or closed
 
 The behaviour for the pipeline is:
