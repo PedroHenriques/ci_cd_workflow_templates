@@ -26,6 +26,11 @@ on:
         required: true
         type: string
         description: "Tag of the Docker images of the services that will be deployed"
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   categorize-changed-services:
     uses: ./.github/workflows/categorize-changed-services.yml
