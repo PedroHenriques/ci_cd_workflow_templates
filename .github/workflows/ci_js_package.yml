@@ -38,6 +38,11 @@ on:
         required: true
         type: string
         description: "Name of the PR label that signals that a deployment should be made with a PATCH version bump"
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   comment-on-pr-labels:
     runs-on: ubuntu-latest
@@ -131,7 +136,8 @@ jobs:
         env:
           SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
         run: >-
-          sh cli/build.sh --tag ${VERSION_BUMP_TYPE} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
+          chmod +x ./cli/build.sh;
+          ./cli/build.sh --tag ${VERSION_BUMP_TYPE} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
 
       - uses: actions/setup-node@v4
         with:
