@@ -30,6 +30,10 @@ on:
         description: "Whitespace separated list of services to build"
         value: ${{ jobs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   categorize-changed-services:
     runs-on: ubuntu-latest

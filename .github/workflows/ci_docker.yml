@@ -30,6 +30,11 @@ on:
       img_tag:
         description: "The tag of the pushed images"
         value: ${{ jobs.build-and-push.outputs.IMG_TAG }}
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   linter-and-tests:
     uses: ./.github/workflows/linter-tests.yml
@@ -65,8 +70,9 @@ jobs:
         run: >-
           SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');
           IMG_TAG=$(git rev-parse --short HEAD);
-          
-          sh cli/build.sh --cicd --tag ${IMG_TAG} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
+
+          chmod +x ./cli/build.sh;
+          ./cli/build.sh --cicd --tag ${IMG_TAG} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
 
           echo "IMG_TAG=${IMG_TAG}" >> "$GITHUB_OUTPUT";
 
