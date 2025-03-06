@@ -64,15 +64,18 @@ These templates expect the following `env vars` to be configured in your applica
 ## CI template
 
 ### Inputs
-- `environment`: (**Required**) Github environment to deploy to
-- `deployable_branch_name`: (**Required**) Name of the branch that will trigger a deployment
-- `source_dir_name`: (**Required**) Name of the directory, relative to the repo's root, where the directories with source code of the service(s) are located
-- `deployment_file-or-dir_path`: (**Required**) Path, inside each service, that identifies the service as a deployable service
-- `custom_service_file_pattern`: (**Required**) File pattern, inside each service, to a file that identifies a service as a custom service
-- `build_file_pattern`: (**Required**) File pattern, inside each service, to a file that identifies a service needing to be built
-- `major_version_label_name`: (**Required**) Name of the PR label that signals that a deployment should be made with a MAJOR version bump
-- `minor_version_label_name`: (**Required**) Name of the PR label that signals that a deployment should be made with a MINOR version bump
-- `patch_version_label_name`: (**Required**) Name of the PR label that signals that a deployment should be made with a PATCH version bump
+| Name | Required | Description |
+| ----------- | ----------- | ----------- |
+| `environment` | Yes | Github environment to deploy to |
+| `deployable_branch_name` | Yes | Name of the branch that will trigger a deployment |
+| `source_dir_name` | Yes | Name of the directory, relative to the repo's root, where the directories with source code of the service(s) are located |
+| `deployment_file-or-dir_path` | Yes | Path, inside each service, that identifies the service as a deployable service |
+| `custom_service_file_pattern` | Yes | File pattern, inside each service, to a file that identifies a service as a custom service |
+| `build_file_pattern` | Yes | File pattern, inside each service, to a file that identifies a service needing to be built |
+| `major_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a MAJOR version bump |
+| `minor_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a MINOR version bump |
+| `patch_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a PATCH version bump |
+| `deploy_all_services_label_name` | No | Name of the PR label that signals that all deployable services should be deployed, regardless of changed files |
 
 ## Example of using these templates
 

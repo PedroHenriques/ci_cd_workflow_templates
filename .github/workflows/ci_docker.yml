@@ -26,6 +26,10 @@ on:
         required: true
         type: string
         description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+      deploy_all_services_label_name:
+        required: false
+        type: string
+        description: "Name of the PR label that signals that all deployable services should be deployed, regardless of changed files"
     outputs:
       img_tag:
         description: "The tag of the pushed images"
@@ -43,7 +47,7 @@ jobs:
 
   categorize-changed-services:
     needs: linter-and-tests
-    if: ${{ github.event_name == 'push' && github.ref_name == inputs.deployable_branch_name }}
+    if: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true)) && github.ref_name == inputs.deployable_branch_name }}
     uses: ./.github/workflows/categorize-changed-services.yml
     with:
       environment: ${{ inputs.environment }}
@@ -51,11 +55,12 @@ jobs:
       deployment_file-or-dir_path: ${{ inputs.manifest_dir_name }}
       custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
       build_file_pattern: ${{ inputs.build_file_pattern }}
+      force_deploy_all_services: ${{ inputs.deploy_all_services_label_name != '' && contains(github.event.pull_request.labels.*.name, inputs.deploy_all_services_label_name) }}
 
   build-and-push:
     runs-on: ubuntu-latest
     needs: categorize-changed-services
-    if: ${{ github.event_name == 'push' && github.ref_name == inputs.deployable_branch_name && needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' }}
+    if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' || (vars.NUM_TAGS_TO_KEEP && needs.categorize-changed-services.outputs.SERVICES_TO_REMOVE != '') }}
     environment: ${{ inputs.environment }}
     outputs:
       IMG_TAG: ${{ steps.build-artifacts.outputs.IMG_TAG }}
@@ -65,12 +70,13 @@ jobs:
 
       - name: Build artifacts
         id: build-artifacts
+        if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' }}
         env:
           SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
         run: >-
           SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');
           IMG_TAG=$(git rev-parse --short HEAD);
-
+          
           chmod +x ./cli/build.sh;
           ./cli/build.sh --cicd --tag ${IMG_TAG} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
 
@@ -83,13 +89,13 @@ jobs:
 
       - name: Push Docker build artifacts
         id: push-docker-build-artifacts
+        if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' }}
         env:
           SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
           IMG_TAG: ${{ steps.build-artifacts.outputs.IMG_TAG }}
         run: >-
           az acr login --name ${{ vars.ACR_NAME }};
 
-          CR_REPOS_AFFECTED=();
           SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');
           for service in ${SERVICES_TO_BUILD[@]}; do
             echo "Pushing '${service}' service";
@@ -98,31 +104,52 @@ jobs:
 
             docker image tag "${IMAGE_NAME}:${IMG_TAG}" "${IMAGE_REMOTE_NAME}";
             docker push ${IMAGE_REMOTE_NAME};
-
-            CR_REPOS_AFFECTED+=("${{ vars.ACR_REPO_NAME }}/${IMAGE_NAME}");
           done
-
-          echo "CR_REPOS_AFFECTED=${CR_REPOS_AFFECTED[@]}" >> "$GITHUB_OUTPUT";
 
       - name: Prune container registry
         if: ${{ vars.NUM_TAGS_TO_KEEP }}
         env:
-          NUM_TAGS_TO_KEEP: ${{ vars.NUM_TAGS_TO_KEEP }}
-          REPO_LIST: ${{ steps.push-docker-build-artifacts.outputs.CR_REPOS_AFFECTED }}
+          SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+          SERVICES_TO_REMOVE: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_REMOVE }}
         run: >-
-          CR_REPOS=(${REPO_LIST//./ });
-          for repo in ${CR_REPOS[@]}; do
-            echo "Processing repo: ${repo}";
+          prune_repo () {
+            REPO=$1;
+            NUM_TAGS_TO_KEEP=$2;
 
-            TAGS=$(az acr repository show-tags --name "${{ vars.ACR_NAME }}" --repository "$repo" --orderby time_asc --output json);
+            echo "Processing repo: ${REPO}";
+
+            TAGS=$(az acr repository show-tags --name "${{ vars.ACR_NAME }}" --repository "${REPO}" --orderby time_asc --output json);
             TAGS=($(echo "${TAGS}" | jq -r '.[]')); # Convert JSON into bash array
             echo "Found tags: ${TAGS[@]}";
 
-            TAGS=("${TAGS[@]:0:${#TAGS[@]}-${NUM_TAGS_TO_KEEP}}"); # Remove the newest NUM_TAGS_TO_KEEP tags from the array (using AWK)
-            echo "Removed the ${NUM_TAGS_TO_KEEP} newest tags. Will delete the tags: ${TAGS[@]}";
+            if [ ${#TAGS[@]} -gt ${NUM_TAGS_TO_KEEP} ]; then
+              TAGS=("${TAGS[@]:0:${#TAGS[@]}-${NUM_TAGS_TO_KEEP}}"); # Remove the newest NUM_TAGS_TO_KEEP tags from the array (using AWK)
+              echo "Keeping the ${NUM_TAGS_TO_KEEP} newest tags. Will delete the tags: ${TAGS[@]}";
 
-            for tag in ${TAGS[@]}; do
-              echo "Deleting the tag: ${tag}";
-              az acr repository delete --name "${{ vars.ACR_NAME }}" --image "${repo}:${tag}" -y;
-            done
+              for tag in ${TAGS[@]}; do
+                echo "Deleting the tag: ${tag}";
+                az acr repository delete --name "${{ vars.ACR_NAME }}" --image "${REPO}:${tag}" -y;
+              done
+            else
+              echo "Number of tags below minimum. No need to prune.";
+            fi
+          }
+
+          SERVICE_REPO_BASE_PATH="${{ vars.ACR_REPO_NAME }}/${{ vars.PROJECT_NAME }}";
+
+          SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');
+          for service in ${SERVICES_TO_BUILD[@]}; do
+            echo "Checking built service '${service}' for image pruning.";
+            prune_repo "${SERVICE_REPO_BASE_PATH}_${service}" ${{ vars.NUM_TAGS_TO_KEEP }};
           done
+          
+          SERVICES_TO_REMOVE=$(echo "${SERVICES_TO_REMOVE}" | tr '[:upper:]' '[:lower:]');
+          for service in ${SERVICES_TO_REMOVE[@]}; do
+            echo "Checking removed service '${service}' for image pruning.";
+            prune_repo "${SERVICE_REPO_BASE_PATH}_${service}" 0;
+          done
+
+      - name: Logout from Azure
+        if: always()
+        run: >-
+          az logout;

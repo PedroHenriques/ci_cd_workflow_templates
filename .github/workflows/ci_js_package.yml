@@ -38,6 +38,10 @@ on:
         required: true
         type: string
         description: "Name of the PR label that signals that a deployment should be made with a PATCH version bump"
+      deploy_all_services_label_name:
+        required: false
+        type: string
+        description: "Name of the PR label that signals that all deployable services should be deployed, regardless of changed files"
 
 defaults:
   run:
@@ -117,6 +121,7 @@ jobs:
       deployment_file-or-dir_path: ${{ inputs.deployment_file-or-dir_path }}
       custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
       build_file_pattern: ${{ inputs.build_file_pattern }}
+      force_deploy_all_services: ${{ inputs.deploy_all_services_label_name != '' && contains(github.event.pull_request.labels.*.name, inputs.deploy_all_services_label_name) }}
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -131,18 +136,18 @@ jobs:
         with:
           token: ${{ secrets.OWN_REPO_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '23.x'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Build artifacts
         id: build-artifacts
         env:
           SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
         run: >-
           chmod +x ./cli/build.sh;
-          ./cli/build.sh --tag ${VERSION_BUMP_TYPE} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '23.x'
-          registry-url: 'https://registry.npmjs.org'
+          ./cli/build.sh --cicd --tag ${VERSION_BUMP_TYPE} --proj ${{ vars.PROJECT_NAME }} ${SERVICES_TO_BUILD};
 
       - name: Bump version and publish JS build artifacts
         env:
