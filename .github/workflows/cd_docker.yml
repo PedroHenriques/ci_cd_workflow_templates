@@ -26,6 +26,10 @@ on:
         required: true
         type: string
         description: "Tag of the Docker images of the services that will be deployed"
+      deploy_all_services_label_name:
+        required: false
+        type: string
+        description: "Name of the PR label that signals that all deployable services should be deployed, regardless of changed files"
 
 defaults:
   run:
@@ -40,14 +44,16 @@ jobs:
       deployment_file-or-dir_path: ${{ inputs.manifest_dir_name }}
       custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
       build_file_pattern: ${{ inputs.build_file_pattern }}
+      force_deploy_all_services: ${{ inputs.deploy_all_services_label_name != '' && contains(github.event.pull_request.labels.*.name, inputs.deploy_all_services_label_name) }}
 
   build-and-commit-manifests:
     needs: categorize-changed-services
-    if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY != '' }}
+    if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY != '' || needs.categorize-changed-services.outputs.SERVICES_TO_REMOVE != '' }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     env:
       SERVICES_TO_DEPLOY: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY }}
+      SERVICES_TO_REMOVE: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_REMOVE }}
       IMG_TAG: ${{ inputs.img_tag }}
       ENVIRONMENT: ${{ inputs.environment }}
       NAMESPACE: ${{ vars.PROJECT_NAME }}
@@ -108,6 +114,9 @@ jobs:
           ${{ insert }}: ${{ vars }}
           ${{ insert }}: ${{ secrets }}
         run: >-
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)";
+          brew install kubeconform trivy;
+
           IDP_APP_PATH="${{ steps.prepare-idp-repo-clone.outputs.IDP_APP_PATH }}";
 
           KUSTOMIZATION_APP_FILE_PATH="${IDP_APP_PATH}/kustomization.yaml";
@@ -118,9 +127,9 @@ jobs:
             printf -- "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n" > ${KUSTOMIZATION_APP_FILE_PATH};
           fi
 
-          SERVICES=(${SERVICES_TO_DEPLOY//./ });
+          IFS=' ' read -r -a SERVICES <<< "${SERVICES_TO_DEPLOY}";
           for service in ${SERVICES[@]}; do
-            export SERVICE=${service};
+            export SERVICE=$(echo "${service}" | tr '[:upper:]' '[:lower:]');
 
             mkdir -p "${IDP_APP_PATH}/${service}";
             if grep -Fxq -- "- ${service}" "${KUSTOMIZATION_APP_FILE_PATH}"; then
@@ -133,22 +142,38 @@ jobs:
             KUSTOMIZATION_APP_SERVICE_PATH="${IDP_APP_PATH}/${service}/kustomization.yaml";
             printf -- "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n" > ${KUSTOMIZATION_APP_SERVICE_PATH};
 
-            IMG_NAME="${{ vars.ACR_NAME }}.azurecr.io/${{ vars.ACR_REPO_NAME }}/${{ vars.PROJECT_NAME }}_${service}:${IMG_TAG}";
+            IMG_NAME="${{ vars.ACR_NAME }}.azurecr.io/${{ vars.ACR_REPO_NAME }}/${{ vars.PROJECT_NAME }}_${SERVICE}";
             export IMG_NAME;
 
-            for file in $(find "${SRC_DIR}/${service}/${MANIFEST_DIR}" -maxdepth 1 -type f); do
+            SERVICE_MANIFEST_PATH="${SRC_DIR}/${service}/${MANIFEST_DIR}";
+            for file in $(find "${SERVICE_MANIFEST_PATH}" -maxdepth 1 -type f \( -name "*.yml" -o -name "*.yaml" \)); do
               echo "Processing file: ${file}";
 
-              FILE_NAME=${file#*/*/*/};
+              FILE_NAME=${file#"${SERVICE_MANIFEST_PATH}/"};
               envsubst < $file > "${IDP_APP_PATH}/${service}/${FILE_NAME}";
               printf -- "- ${FILE_NAME}\n" >> ${KUSTOMIZATION_APP_SERVICE_PATH};
 
               if grep -Fxq -- "kind: Secret" "${file}"; then
                 echo "Processing file '${file}' as a secret.";
+                
+                echo "Base64 encoding the values in the 'data' property.";
+                yq e '.data = (.data | map_values(@base64))' -i "${IDP_APP_PATH}/${service}/${FILE_NAME}";
+                
+                echo "Encripting the file.";
                 kubeseal -o yaml --controller-namespace ${{ vars.SEALED_SECRET_CTRL_NAMESPACE }} --controller-name ${{ vars.SEALED_SECRET_CTRL_NAME }} --cert=${{ steps.get-public-key-from-cluster.outputs.PUB_SEALED_SECRETS_PEM_PATH }} < "${IDP_APP_PATH}/${service}/${FILE_NAME}" > "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}";
                 mv "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}" "${IDP_APP_PATH}/${service}/${FILE_NAME}";
               fi
             done
+
+            kubeconform -skip SealedSecret -ignore-filename-pattern kustomization.yaml -n 16 "${IDP_APP_PATH}/${service}/";
+            trivy fs --exit-code 0 --severity MEDIUM,HIGH --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
+            trivy fs --exit-code 1 --severity CRITICAL --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
+          done
+
+          IFS=' ' read -r -a SERVICES <<< "${SERVICES_TO_REMOVE}";
+          for service in ${SERVICES[@]}; do
+            echo "Removing the service '${service}' from the application's kustomization.yaml file";
+            sed -i -- "/- ${service}/d" "${KUSTOMIZATION_APP_FILE_PATH}";
           done
 
       - name: Open PR in IDP repo
@@ -171,3 +196,8 @@ jobs:
           else
             echo "A PR already exists between the branches 'main' and '${BRANCH_NAME}'.";
           fi
+
+      - name: Logout from Azure
+        if: always()
+        run: >-
+          az logout;
