@@ -42,6 +42,16 @@ This allows for:
 - Building and publishing artifacts only for the services that changed
 - Deploying only the services that changed
 
+All these templates will categorize the changed services in your application repository as:
+- **Deployable Service**: A service that will be deployed to the remote target
+- **Buildable Service**: A service for which a build artifact will be built
+- **Removed Service**: A service that was removed  from the  application
+
+Services can belong in multiple categories.<br>
+Example:
+- A service that has a Dockerfile and Kubernetes manifest files is both "buildable" and "deployable"
+- A service that only has Kubernetes manifest files is only "deployable"
+
 Services are identified by a directory inside the "source directory", which is an input of the templates.  
 Inside each service directory you can place all the files needed to build and deploy that service.
 

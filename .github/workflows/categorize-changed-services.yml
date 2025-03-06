@@ -22,6 +22,10 @@ on:
         required: true
         type: string
         description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+      force_deploy_all_services:
+        required: true
+        type: boolean
+        description: "Signals if all deployable services should be deployed, regardless of changed files"
     outputs:
       SERVICES_TO_DEPLOY:
         description: "Whitespace separated list of services to deploy"
@@ -29,6 +33,9 @@ on:
       SERVICES_TO_BUILD:
         description: "Whitespace separated list of services to build"
         value: ${{ jobs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+      SERVICES_TO_REMOVE:
+        description: "Whitespace separated list of services to remove"
+        value: ${{ jobs.categorize-changed-services.outputs.SERVICES_TO_REMOVE }}
 
 defaults:
   run:
@@ -41,6 +48,7 @@ jobs:
     outputs:
       SERVICES_TO_DEPLOY: ${{ steps.services-to-deploy-and-build.outputs.SERVICES_TO_DEPLOY }}
       SERVICES_TO_BUILD: ${{ steps.services-to-deploy-and-build.outputs.SERVICES_TO_BUILD }}
+      SERVICES_TO_REMOVE: ${{ steps.services-to-deploy-and-build.outputs.SERVICES_TO_REMOVE }}
     steps:
       - name: Clone repo
         uses: actions/checkout@v4
@@ -59,46 +67,57 @@ jobs:
           DEPLOYMENT_FILE_DIR_PATH: ${{ inputs.deployment_file-or-dir_path }}
           CUSTOM_SERVICE_FILE_PATTERN: ${{ inputs.custom_service_file_pattern }}
           BUILD_FILE_PATTERN: ${{ inputs.build_file_pattern }}
+          FORCE_DEPLOY_ALL_SERVICES: ${{ inputs.force_deploy_all_services }}
         run: >-
-          IFS=$',' read -a ALL_CHANGED_FILES <<< "${{ steps.changed-files.outputs.all_changed_files }}";
+          IFS=$',' read -a ALL_MODIFIED_FILES <<< "${{ steps.changed-files.outputs.all_modified_files }}";
 
           SERVICES_TO_DEPLOY=();
           SERVICES_TO_BUILD=();
+          SERVICES_TO_REMOVE=();
           DEPLOY_ALL_CUSTOM=0;
 
-          for file in "${ALL_CHANGED_FILES[@]}"; do
-            echo "'${file}' was changed";
+          if [ ${FORCE_DEPLOY_ALL_SERVICES} = false ]; then
+            for file in "${ALL_MODIFIED_FILES[@]}"; do
+              echo "'${file}' was changed";
+  
+              SERVICE_PATH_TMP=${file#"${SRC_DIR}/"};
+              SERVICE_NAME=${SERVICE_PATH_TMP%%/*};
 
-            SERVICE_PATH_TMP=${file#*/};
-            SERVICE_NAME=${SERVICE_PATH_TMP%%/*};
-            
-            if [ -e "${SRC_DIR}/${SERVICE_NAME}/${DEPLOYMENT_FILE_DIR_PATH}" ]; then
-              SERVICES_TO_DEPLOY+=(${SERVICE_NAME});
-
-              FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${BUILD_FILE_PATTERN}" | wc -l);
-              if [ ${FILE_COUNT} -gt 0 ]; then
-                SERVICES_TO_BUILD+=(${SERVICE_NAME});
-              else
-                echo "No '${BUILD_FILE_PATTERN}' found for the service '${SERVICE_NAME}'";
+              if [ ! -e "${SRC_DIR}/${SERVICE_NAME}" ]; then
+                echo "The file's service, located at '${SRC_DIR}/${SERVICE_NAME}', does not exist and will be marked as removed.";
+                SERVICES_TO_REMOVE+=(${SERVICE_NAME});
+                continue;
               fi
-            else
-              echo "No deployment files found for the service '${SERVICE_NAME}'";
-
-              FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${CUSTOM_SERVICE_FILE_PATTERN}" | wc -l);
-              if [ ${FILE_COUNT} -gt 0 ]; then
-                DEPLOY_ALL_CUSTOM=1;
+              
+              if [ -e "${SRC_DIR}/${SERVICE_NAME}/${DEPLOYMENT_FILE_DIR_PATH}" ]; then
+                SERVICES_TO_DEPLOY+=(${SERVICE_NAME});
+  
+                FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${BUILD_FILE_PATTERN}" | wc -l);
+                if [ ${FILE_COUNT} -gt 0 ]; then
+                  SERVICES_TO_BUILD+=(${SERVICE_NAME});
+                else
+                  echo "No '${BUILD_FILE_PATTERN}' found for the service '${SERVICE_NAME}'";
+                fi
               else
-                echo "No '${CUSTOM_SERVICE_FILE_PATTERN}' found for the service '${SERVICE_NAME}'";
+                echo "No deployment files found for the service '${SERVICE_NAME}'";
+  
+                FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${CUSTOM_SERVICE_FILE_PATTERN}" | wc -l);
+                if [ ${FILE_COUNT} -gt 0 ]; then
+                  DEPLOY_ALL_CUSTOM=1;
+                  echo "Some changed custom services are not deployable (don't have a manifest files). Treating them as shared libs and deploying all custom services.";
+                else
+                  echo "No '${CUSTOM_SERVICE_FILE_PATTERN}' found for the service '${SERVICE_NAME}'";
+                fi
               fi
-            fi
-          done
+            done
+          else
+            echo "Force deploying all deployable services.";
+          fi
 
-          if [ ${DEPLOY_ALL_CUSTOM} -eq 1 ]; then
-            echo "Some changed custom services are not deployable (don't have a manifest files). Treating them as shared libs and deploying all custom services.";
-
+          if [ ${FORCE_DEPLOY_ALL_SERVICES} = true ] || [ ${DEPLOY_ALL_CUSTOM} -eq 1 ]; then
             for path in $(find ${SRC_DIR} -maxdepth 1 -mindepth 1 -type d); do
               echo "Found path: ${path}";
-              SERVICE_NAME=${path#*/};
+              SERVICE_NAME=${path#"${SRC_DIR}/"};
 
               if [ -e "${path}/${DEPLOYMENT_FILE_DIR_PATH}" ]; then
                 FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${CUSTOM_SERVICE_FILE_PATTERN}" | wc -l);
@@ -118,11 +137,15 @@ jobs:
             done
           fi
 
+          # Remove duplicate entries from the arrays
           SERVICES_TO_DEPLOY=($(for service in "${SERVICES_TO_DEPLOY[@]}"; do echo "${service}"; done | sort -u));
           SERVICES_TO_BUILD=($(for service in "${SERVICES_TO_BUILD[@]}"; do echo "${service}"; done | sort -u));
+          SERVICES_TO_REMOVE=($(for service in "${SERVICES_TO_REMOVE[@]}"; do echo "${service}"; done | sort -u));
 
           echo "Services to deploy: ${SERVICES_TO_DEPLOY[@]}";
           echo "Services to build: ${SERVICES_TO_BUILD[@]}";
+          echo "Services to remove: ${SERVICES_TO_REMOVE[@]}";
 
           echo "SERVICES_TO_DEPLOY=${SERVICES_TO_DEPLOY[@]}" >> "$GITHUB_OUTPUT";
           echo "SERVICES_TO_BUILD=${SERVICES_TO_BUILD[@]}" >> "$GITHUB_OUTPUT";
+          echo "SERVICES_TO_REMOVE=${SERVICES_TO_REMOVE[@]}" >> "$GITHUB_OUTPUT";
