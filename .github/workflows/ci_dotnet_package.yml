@@ -1,0 +1,193 @@
+name: ci_dotnet_package
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Github environment to deploy to"
+      deployable_branch_name:
+        required: true
+        type: string
+        description: "Name of the branch that will trigger a deployment"
+      source_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, relative to the repo's root, where the directories with source code of the service(s) is located"
+      deployment_file-or-dir_path:
+        required: true
+        type: string
+        description: "Path, inside each service, that identifies the service as a deployable service"
+      custom_service_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service as a custom service"
+      build_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+      major_version_label_name:
+        required: true
+        type: string
+        description: "Name of the PR label that signals that a deployment should be made with a MAJOR version bump"
+      minor_version_label_name:
+        required: true
+        type: string
+        description: "Name of the PR label that signals that a deployment should be made with a MINOR version bump"
+      patch_version_label_name:
+        required: true
+        type: string
+        description: "Name of the PR label that signals that a deployment should be made with a PATCH version bump"
+      deploy_all_services_label_name:
+        required: false
+        type: string
+        description: "Name of the PR label that signals that all deployable services should be deployed, regardless of changed files"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  comment-on-pr-labels:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' }}
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.OWN_REPO_TOKEN }}
+
+      - name: Add comment to PR about labels and deployments
+        env:
+          GITHUB_TOKEN: ${{ secrets.OWN_REPO_TOKEN }}
+        run: >-
+          git config user.name github-actions[bot];
+          git config user.email github-actions[bot]@users.noreply.github.com;
+
+          PR_ID=${{ github.event.pull_request.number }};
+          COMMENT_BODY="To trigger a deploy of a new version of this package ensure that this PR has 1 of the following labels: '${{ inputs.major_version_label_name }}', '${{ inputs.minor_version_label_name }}', '${{ inputs.patch_version_label_name }}'.\n\n
+          If the PR has more than 1 of these labels, the highest priority one will be considered ('${{ inputs.major_version_label_name }}' > '${{ inputs.minor_version_label_name }}' > '${{ inputs.patch_version_label_name }}')\n\n
+          When the PR is merged, if it does not have any of the listed labels, no deployment will be triggered.";
+
+          echo -e "${COMMENT_BODY}" > pr_body;
+          echo "PR with number '${PR_ID}' opened. Leaving a comment about PR labels and deployments.";
+          export pr_body=$(cat pr_body); gh pr comment "${PR_ID}" -b "$pr_body";
+
+  linter-and-tests:
+    uses: ./.github/workflows/linter-tests.yml
+    with:
+      environment: ${{ inputs.environment }}
+
+  determine-version-bump:
+    needs: linter-and-tests
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.base_ref == inputs.deployable_branch_name }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      VERSION_BUMP_TYPE: ${{ steps.determine-version-bump-type.outputs.VERSION_BUMP_TYPE }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Determine version bump type
+        id: determine-version-bump-type
+        run: >-
+          echo "The PR had these labels: ${{ join(github.event.pull_request.labels.*.name, ' | ') }}";
+
+          VERSION_BUMP_TYPE="";
+          if ${{ contains(github.event.pull_request.labels.*.name, inputs.major_version_label_name) }}; then
+            echo "MAJOR version bump";
+            VERSION_BUMP_TYPE="major";
+          elif ${{ contains(github.event.pull_request.labels.*.name, inputs.minor_version_label_name) }}; then
+            echo "MINOR version bump";
+            VERSION_BUMP_TYPE="minor";
+          elif ${{ contains(github.event.pull_request.labels.*.name, inputs.patch_version_label_name) }}; then
+            echo "PATCH version bump";
+            VERSION_BUMP_TYPE="patch";
+          else
+            echo "No deployment label found.";
+          fi
+          
+          echo "VERSION_BUMP_TYPE=${VERSION_BUMP_TYPE}" >> "$GITHUB_OUTPUT";
+
+  categorize-changed-services:
+    needs: determine-version-bump
+    if: ${{ needs.determine-version-bump.outputs.VERSION_BUMP_TYPE != '' }}
+    uses: ./.github/workflows/categorize-changed-services.yml
+    with:
+      environment: ${{ inputs.environment }}
+      source_dir_name: ${{ inputs.source_dir_name }}
+      deployment_file-or-dir_path: ${{ inputs.deployment_file-or-dir_path }}
+      custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
+      build_file_pattern: ${{ inputs.build_file_pattern }}
+      force_deploy_all_services: ${{ inputs.deploy_all_services_label_name != '' && contains(github.event.pull_request.labels.*.name, inputs.deploy_all_services_label_name) }}
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [determine-version-bump, categorize-changed-services]
+    if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' }}
+    environment: ${{ inputs.environment }}
+    env:
+      VERSION_BUMP_TYPE: ${{ needs.determine-version-bump.outputs.VERSION_BUMP_TYPE }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.OWN_REPO_TOKEN }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Bump version and publish .Net build artifacts
+        env:
+          SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+          NUGET_AUTH_TOKEN: ${{ secrets.NUGET_TOKEN }}
+        run: >-
+          git pull origin ${{ inputs.deployable_branch_name }};
+
+          for service in ${SERVICES_TO_BUILD[@]}; do
+            echo "Bumping version in the .csproj file for service: ${service}";
+
+            PROJ_FILE=$(find "${GITHUB_WORKSPACE}/${{ inputs.source_dir_name }}/${service}" -maxdepth 1 -name '*.csproj' | head -n 1);
+            echo "Found project file: ${PROJ_FILE}";
+            CUR_VERSION=$(yq -p=xml '.Project.PropertyGroup.Version' "${PROJ_FILE}");
+            echo "Current version is: ${CUR_VERSION}";
+
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${CUR_VERSION}";
+            if [[ "${VERSION_BUMP_TYPE}" == "major" ]]; then
+              MAJOR=$((MAJOR + 1));
+              MINOR="0";
+              PATCH="0";
+            elif [[ "${VERSION_BUMP_TYPE}" == "minor" ]]; then
+              MINOR=$((MINOR + 1));
+              PATCH="0";
+            elif [[ "${VERSION_BUMP_TYPE}" == "patch" ]]; then
+              PATCH=$((PATCH + 1));
+            else
+              echo "There are services to build, but no supported version bump detected!";
+              exit 1;
+            fi
+
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}";
+            echo "New version is: ${NEW_VERSION}";
+
+            sed -i '1s/^\xEF\xBB\xBF//' "${PROJ_FILE}";
+            yq -p=xml -o=xml -i ".Project.PropertyGroup.Version = \"${NEW_VERSION}\"" "$PROJ_FILE";
+
+            dotnet pack -o release "${GITHUB_WORKSPACE}/${{ inputs.source_dir_name }}/${service}";
+          done
+
+          dotnet nuget push release/ -s https://api.nuget.org/v3/index.json -k ${NUGET_AUTH_TOKEN} --skip-duplicate;
+
+      - name: Commit changes made to project files
+        env:
+          SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
+          GITHUB_TOKEN: ${{ secrets.OWN_REPO_TOKEN }}
+        run: >-
+          git config user.name github-actions[bot];
+          git config user.email github-actions[bot]@users.noreply.github.com;
+
+          git commit -am "'${VERSION_BUMP_TYPE}' version bump for the services '${SERVICES_TO_BUILD[@]}'";
+          git push origin ${{ inputs.deployable_branch_name }};
