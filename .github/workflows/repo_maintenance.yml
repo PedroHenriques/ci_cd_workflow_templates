@@ -1,0 +1,82 @@
+name: repo_maintenance
+on:
+  workflow_call:
+    inputs:
+      template_type:
+        required: true
+        type: string
+        description: "One of: 'dotnet' | 'javascript_fe'"
+      pr_reviewers:
+        required: true
+        type: string
+        description: "Comma separated list of pull request reviewers"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  template-repo-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.OWN_REPO_TOKEN }}
+
+      - name: actions-template-sync
+        uses: AndreasAugustin/actions-template-sync@v2
+        with:
+          source_repo_path: PedroHenriques/dotnet_ms_template
+          upstream_branch: main
+          source_gh_token: ${{ secrets.TEMPLATE_REPO_TOKEN }}
+          target_gh_token: ${{ secrets.OWN_REPO_TOKEN }}
+          pr_labels: template_repo_sync
+          pr_reviewers: ${{ inputs.pr_reviewers }}
+          git_user_name: github-actions[bot]
+          git_user_email: github-actions[bot]@users.noreply.github.com
+          template_sync_ignore_file_path: setup/workflows/.templatesyncignore
+
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update dependencies
+        run: >-
+          chmod +x ./cli/dependencies_update.sh;
+          ./cli/dependencies_update.sh --cicd -u -y;
+
+      - name: Open PR with bumped versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.OWN_REPO_TOKEN }}
+        run: >-
+          git config user.name github-actions[bot];
+          git config user.email github-actions[bot]@users.noreply.github.com;
+
+          printf -v CUR_DATE '%(%Y-%m-%d)T\n' -1;
+          BRANCH_NAME="dependencies-version-bump-${CUR_DATE}";
+
+          if [ $(git status -s -uno | wc -l) -eq 0 ]; then
+            echo "No changed files.";
+            exit 0;
+          fi
+
+          git checkout -b $BRANCH_NAME;
+          git commit -am "Dependencies version bump ${CUR_DATE}";
+          git push origin $BRANCH_NAME;
+
+          PR_TITLE="Dependencies version bump ${CUR_DATE}";
+          PR_BODY="PR from maintenance workflow for dependencies version update.";
+
+          PR_LIST=$(gh pr list -B main -H ${BRANCH_NAME} -S "is:open ${PR_TITLE} in:title");
+          if [[ "${PR_LIST}" == "" ]]; then
+            echo "No opened PR exists between the branches 'main' and '${BRANCH_NAME}' with the title '${PR_TITLE}'. Creating a PR.";
+            gh pr create -B main -H ${BRANCH_NAME} --title "${PR_TITLE}" --body "${PR_BODY}";
+          else
+            echo "A PR already exists between the branches 'main' and '${BRANCH_NAME}'.";
+          fi

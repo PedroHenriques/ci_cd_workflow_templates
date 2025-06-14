@@ -86,3 +86,5 @@ If you use a template and specify the directory `src` as the "source directory" 
 | ----------- | ----------- | ----------- | ----------- |
 | Docker | Use these templates if your application requires building and deploying Docker images | `@main`<br>`@v1` | [doc](/docs/docker.md) |
 | Javascript Package | Use these templates if your application requires building and deploying JS packages to a package manager | `@main`<br>`@v1` | [doc](/docs/js_package.md) |
+| .Net Package | Use these templates if your application requires building and deploying .Net packages to a package manager | `@main`<br>`@v1` | [doc](/docs/dotnet_package.md) |
+| Repository maintenance | Use this template to run maintenance jobs on application repositories | `@main`<br>`@v1` | [doc](/docs/repo_maintenance.md) |

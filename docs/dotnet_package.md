@@ -1,4 +1,4 @@
-# Templates for applications that require building and deploying Javascript packages to a package manager
+# Templates for applications that require building and deploying .Net packages to a package manager
 
 ## What these templates do
 
@@ -14,8 +14,8 @@ The CI template will:
   - If it had any of those tags:
     - Build the packages for the services that will be deployed
     - Bump the version of the services that will be deployed
-    - Publish the packages to NPM
-    - Commit and push to the specified `deployable branch` the updated files with the new package version
+    - Publish the packages to Nuget
+    - Commit and push to the specified `deployable branch` the updated project files with the new package version
 
 ## Pre-requisites
 
@@ -28,7 +28,6 @@ These templates will interact with the following scripts in your application rep
 | `cli/lint.sh` | no | Run any static code analysis tools you want, inside Docker containers | `--cicd` | N/A | `sh cli/lint.sh --cicd` |
 | `cli/test.sh` | no | Run automated tests on your code, inside Docker containers | `--cicd`<br>`--unit`<br>`--integration`<br>`--e2e` | N/A | `sh cli/test.sh --unit --cicd` |
 | `cli/coverage.sh` | no | Generate test coverage report in lcov format, inside Docker containers | `--cicd` | N/A | `sh cli/coverage.sh --cicd` |
-| `cli/build.sh` | yes | Build the packages for the listed services | `--cicd`<br>`--tag`<br>`--proj` | Whitespace separated list of services to build | `sh cli/build.sh --cicd --tag s6d5sdf --proj myProjectName notification identity` |
 
 #### Detail about the script flags
 
@@ -40,10 +39,6 @@ These templates will interact with the following scripts in your application rep
 - `--integration`: Run all relevant integration tests, if any
 - `--e2e`: Run all relevant end-to-end tests, if any
 
-**build.sh**
-- `--tag`: The type of version bump (major, minor or patch) that will be applied
-- `--proj`: The name of the project
-
 ### Secrets
 
 These templates expect the following `secrets` to be configured in your application repository ([docs](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions))
@@ -51,15 +46,7 @@ These templates expect the following `secrets` to be configured in your applicat
 | Name | Required | Description |
 | ----------- | ----------- | ----------- |
 | `OWN_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to commit and comment in pull requests and to push to the deployable branches in your application repository |
-| `NPM_TOKEN` | Yes | A token to the NPM account where the packages will be published to |
-
-### Environment Variables
-
-These templates expect the following `env vars` to be configured in your application repository ([docs](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#creating-configuration-variables-for-a-repository))
-
-| Name | Required | Description |
-| ----------- | ----------- | ----------- |
-| `PROJECT_NAME` | Yes | The name of your project |
+| `NUGET_TOKEN` | Yes | A token to the Nuget account where the packages will be published to |
 
 ## CI template
 
@@ -85,21 +72,21 @@ Consider the following repo:
 │   ├── workflows
 │   │   ├── pipeline.yml
 ├── cli
-│   ├── build.sh
 │   ├── test.sh
 ├── src
 │   ├── package1
-│   │   ├── js
-│   │   │   ├── index.js
-│   │   ├── webpack.config.js
-│   │   ├── package.json
+│   │   ├── Services
+│   │   │   ├── Myservice.cs
+│   │   ├── Program.cs
+│   │   ├── build.txt
+│   │   ├── package1.csproj
 │   ├── package2
-│   │   ├── js
-│   │   │   ├── index.js
-│   │   ├── package.json
+│   │   ├── Program.cs
+│   │   ├── build.txt
+│   │   ├── package2.csproj
 │   ├── sharedLibs
-│   │   ├── index.js
-└── .npmignore
+│   │   ├── SomeService.cs
+│   │   ├── sharedLibs.csproj
 └── .gitignore
 ```
 
@@ -112,17 +99,18 @@ on:
 
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/ci_js_package.yml@v1
+    uses: PedroHenriques/ci_cd_test_templates/.github/workflows/ci_dotnet_package.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
       source_dir_name: 'src'
-      deployment_file-or-dir_path: 'package.json'
-      custom_service_file_pattern: 'index.js'
-      build_file_pattern: 'webpack.config.js'
+      deployment_file-or-dir_path: 'build.txt'
+      custom_service_file_pattern: '*.csproj'
+      build_file_pattern: 'build.txt'
       major_version_label_name: 'major'
       minor_version_label_name: 'minor'
       patch_version_label_name: 'patch'
+      deploy_all_services_label_name: 'deploy all services'
     secrets: inherit
 ```
 
@@ -132,9 +120,11 @@ With this directory structure:
 - The services that require building a package are `package1` and `package2`, since they have a build file (input `build_file_pattern`)
 - The `sharedLibs` service is not deployable nor buildable, but is a custom service since it has a custom service file (input `custom_service_file_pattern`)
 
-This will trigger the `ci_js_package.yml` template (on the ref `v1`) when
+This will trigger the `ci_dotnet_package.yml` template (on the ref `v1`) when
 - a `pull request` is opened, edited, reopened, synchronized or closed
 
 The behaviour for the pipeline is:
-- Changes to a deployable service (input `deployment_file-or-dir_path`) that has a build file (input `build_file_pattern`) will trigger the package for that service to be built and published to NPM
-- The `sharedLibs` service is considered a shared service, since it is not deployable and has an `index.js` file (input `custom_service_file_pattern`), so if it has changes all deployable services will be marked for deploy (even if they had no file changes)
+- Changes to a deployable service (input `deployment_file-or-dir_path`) that has a build file (input `build_file_pattern`) will trigger the package for that service to be built and published to Nuget
+- The `sharedLibs` service is considered a shared service, since it is not deployable and has a `*.csproj` file (input `custom_service_file_pattern`), so if it has changes all deployable services will be marked for deploy (even if they had no file changes)
+
+**NOTE:** In this example we use an empty file named `build.txt` to identify the services to build and deploy.
