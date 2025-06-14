@@ -139,19 +139,31 @@ jobs:
               printf -- "- ${service}\n" >> ${KUSTOMIZATION_APP_FILE_PATH};
             fi
 
+            SERVICE_MANIFEST_PATH="${SRC_DIR}/${service}/${MANIFEST_DIR}";
             KUSTOMIZATION_APP_SERVICE_PATH="${IDP_APP_PATH}/${service}/kustomization.yaml";
-            printf -- "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n" > ${KUSTOMIZATION_APP_SERVICE_PATH};
+            
+            ADD_SERVICES_TO_KUSTOMIZE=1;
+            if [ -f "${SERVICE_MANIFEST_PATH}/kustomization.yaml" ]; then
+              echo "The application repo has a 'kustomization.yaml' for the service '${service}'. Using it.";
+              envsubst < "${SERVICE_MANIFEST_PATH}/kustomization.yaml" > ${KUSTOMIZATION_APP_SERVICE_PATH};
+              ADD_SERVICES_TO_KUSTOMIZE=0;
+            else
+              echo "The application repo doesn't have a 'kustomization.yaml' for the service '${service}'. Creating it.";
+              printf -- "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n" > ${KUSTOMIZATION_APP_SERVICE_PATH};
+            fi
 
             IMG_NAME="${{ vars.ACR_NAME }}.azurecr.io/${{ vars.ACR_REPO_NAME }}/${{ vars.PROJECT_NAME }}_${SERVICE}";
             export IMG_NAME;
 
-            SERVICE_MANIFEST_PATH="${SRC_DIR}/${service}/${MANIFEST_DIR}";
-            for file in $(find "${SERVICE_MANIFEST_PATH}" -maxdepth 1 -type f \( -name "*.yml" -o -name "*.yaml" \)); do
+            for file in $(find "${SERVICE_MANIFEST_PATH}" -maxdepth 1 -type f \( -name "*.yml" -o -name "*.yaml" \) ! -name "kustomization.yaml" ! -name "kustomization.yml"); do
               echo "Processing file: ${file}";
 
               FILE_NAME=${file#"${SERVICE_MANIFEST_PATH}/"};
               envsubst < $file > "${IDP_APP_PATH}/${service}/${FILE_NAME}";
-              printf -- "- ${FILE_NAME}\n" >> ${KUSTOMIZATION_APP_SERVICE_PATH};
+
+              if [ $ADD_SERVICES_TO_KUSTOMIZE -eq 1 ]; then
+                printf -- "- ${FILE_NAME}\n" >> ${KUSTOMIZATION_APP_SERVICE_PATH};
+              fi
 
               if grep -Fxq -- "kind: Secret" "${file}"; then
                 echo "Processing file '${file}' as a secret.";
@@ -165,7 +177,7 @@ jobs:
               fi
             done
 
-            kubeconform -skip SealedSecret -ignore-filename-pattern kustomization.yaml -n 16 "${IDP_APP_PATH}/${service}/";
+            kubeconform -skip SealedSecret -ignore-filename-pattern '(^|/)(kustomization|helmrelease|values)\.ya?ml$' -n 16 "${IDP_APP_PATH}/${service}/";
             trivy fs --exit-code 0 --severity MEDIUM,HIGH --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
             trivy fs --exit-code 1 --severity CRITICAL --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
           done
@@ -182,6 +194,12 @@ jobs:
           BRANCH_NAME: ${{ steps.prepare-idp-repo-clone.outputs.BRANCH_NAME }}
         run: >-
           cd "${GITHUB_WORKSPACE}/${IDP_REPO_REL_PATH}/";
+
+          if [ $(git status -s -unormal | wc -l) -eq 0 ]; then
+            echo "No changed files.";
+            exit 0;
+          fi
+
           git add .;
           git commit -m "Commit from the CD workflow of the project '${{ vars.PROJECT_NAME }}'." || true;
           git push origin ${BRANCH_NAME};
