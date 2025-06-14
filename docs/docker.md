@@ -143,6 +143,17 @@ data:
   ASPNETCORE_HTTP_PORTS: "${API_MS_PORT}"
 ```
 
+## Advanced use cases
+
+### Applications that have a custom kustomization.yaml file
+
+There are some use cases where the application repository might have a pre-built custom `kustomization.yaml` file, for 1 or several of its services.<br>
+An example of a use case where this will happen is if you want to use a Helm chart and let the Kubernetes cluster handle the process of downloading, appling and mantaintaining the charts.
+
+This CD pipeline template will detect that the service already has a `kustomization.yaml` and will use it.<br>
+You can have placeholders in your pre-built custom `kustomization.yaml` file and this CD pipeline template will replace them based on your application's repository `environment variables` and `secrets`, but it will not change any content of on the file.<br>
+This means that your pre-built custom `kustomization.yaml` file must have all the `resources` declared.
+
 ## Example of using these templates
 
 Consider the following repo:

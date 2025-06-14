@@ -120,16 +120,13 @@ jobs:
               SERVICE_NAME=${path#"${SRC_DIR}/"};
 
               if [ -e "${path}/${DEPLOYMENT_FILE_DIR_PATH}" ]; then
-                FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${CUSTOM_SERVICE_FILE_PATTERN}" | wc -l);
-                if [ ${FILE_COUNT} -gt 0 ]; then
-                  SERVICES_TO_DEPLOY+=(${SERVICE_NAME});
+                SERVICES_TO_DEPLOY+=(${SERVICE_NAME});
 
-                  FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${BUILD_FILE_PATTERN}" | wc -l);
-                  if [ ${FILE_COUNT} -gt 0 ]; then
-                    SERVICES_TO_BUILD+=(${SERVICE_NAME});
-                  else
-                    echo "No '${BUILD_FILE_PATTERN}' for the service '${SERVICE_NAME}'";
-                  fi
+                FILE_COUNT=$(find "${SRC_DIR}/${SERVICE_NAME}" -name "${BUILD_FILE_PATTERN}" | wc -l);
+                if [ ${FILE_COUNT} -gt 0 ]; then
+                  SERVICES_TO_BUILD+=(${SERVICE_NAME});
+                else
+                  echo "No '${BUILD_FILE_PATTERN}' for the service '${SERVICE_NAME}'";
                 fi
               else
                 echo "No deployment files found for the service '${SERVICE_NAME}'";
@@ -137,10 +134,9 @@ jobs:
             done
           fi
 
-          # Remove duplicate entries from the arrays
-          SERVICES_TO_DEPLOY=($(for service in "${SERVICES_TO_DEPLOY[@]}"; do echo "${service}"; done | sort -u));
-          SERVICES_TO_BUILD=($(for service in "${SERVICES_TO_BUILD[@]}"; do echo "${service}"; done | sort -u));
-          SERVICES_TO_REMOVE=($(for service in "${SERVICES_TO_REMOVE[@]}"; do echo "${service}"; done | sort -u));
+          mapfile -t SERVICES_TO_DEPLOY < <(LC_ALL=C printf "%s\n" "${SERVICES_TO_DEPLOY[@]}" | sort -u);
+          mapfile -t SERVICES_TO_BUILD < <(LC_ALL=C printf "%s\n" "${SERVICES_TO_BUILD[@]}" | sort -u);
+          mapfile -t SERVICES_TO_REMOVE < <(LC_ALL=C printf "%s\n" "${SERVICES_TO_REMOVE[@]}" | sort -u);
 
           echo "Services to deploy: ${SERVICES_TO_DEPLOY[@]}";
           echo "Services to build: ${SERVICES_TO_BUILD[@]}";
