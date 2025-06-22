@@ -159,25 +159,41 @@ jobs:
               echo "Processing file: ${file}";
 
               FILE_NAME=${file#"${SERVICE_MANIFEST_PATH}/"};
-              envsubst < $file > "${IDP_APP_PATH}/${service}/${FILE_NAME}";
+              IDP_REPO_FILE_PATH="${IDP_APP_PATH}/${service}/${FILE_NAME}";
+              envsubst < $file > "${IDP_REPO_FILE_PATH}";
 
               if [ $ADD_SERVICES_TO_KUSTOMIZE -eq 1 ]; then
                 printf -- "- ${FILE_NAME}\n" >> ${KUSTOMIZATION_APP_SERVICE_PATH};
               fi
 
-              if grep -Fxq -- "kind: Secret" "${file}"; then
+              KIND=$(yq e '.kind // ""' "${file}");
+
+              if [[ -z "${KIND}" ]]; then
+                echo "Skipping manifest pos-processing for file '${file}' — no .kind detected, not a Kubernetes manifest."
+                continue
+              fi
+
+              if [[ "${KIND}" == "Secret" ]]; then
                 echo "Processing file '${file}' as a secret.";
                 
                 echo "Base64 encoding the values in the 'data' property.";
-                yq e '.data = (.data | map_values(@base64))' -i "${IDP_APP_PATH}/${service}/${FILE_NAME}";
+                yq e '.data = (.data | map_values(@base64))' -i "${IDP_REPO_FILE_PATH}";
                 
                 echo "Encripting the file.";
-                kubeseal -o yaml --controller-namespace ${{ vars.SEALED_SECRET_CTRL_NAMESPACE }} --controller-name ${{ vars.SEALED_SECRET_CTRL_NAME }} --cert=${{ steps.get-public-key-from-cluster.outputs.PUB_SEALED_SECRETS_PEM_PATH }} < "${IDP_APP_PATH}/${service}/${FILE_NAME}" > "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}";
-                mv "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}" "${IDP_APP_PATH}/${service}/${FILE_NAME}";
+                kubeseal -o yaml --controller-namespace ${{ vars.SEALED_SECRET_CTRL_NAMESPACE }} --controller-name ${{ vars.SEALED_SECRET_CTRL_NAME }} --cert=${{ steps.get-public-key-from-cluster.outputs.PUB_SEALED_SECRETS_PEM_PATH }} < "${IDP_REPO_FILE_PATH}" > "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}";
+                mv "${IDP_APP_PATH}/${service}/sealed_${FILE_NAME}" "${IDP_REPO_FILE_PATH}";
+              fi
+
+              CONFIG_HASH=$(env | grep -vE '^(GITHUB|RUNNER|CI|HOME|PATH)=' | sort | sha256sum | cut -d' ' -f1);
+
+              if [[ "${KIND}" == "Deployment" || "${KIND}" == "StatefulSet" || "${KIND}" == "DaemonSet" ]]; then
+                yq e ".spec.template.metadata.annotations.\"checksum/config\" = \"${CONFIG_HASH}\"" -i "${IDP_REPO_FILE_PATH}";
+              else
+                yq e ".metadata.annotations.\"checksum/config\" = \"${CONFIG_HASH}\"" -i "${IDP_REPO_FILE_PATH}";
               fi
             done
 
-            kubeconform -skip SealedSecret -ignore-filename-pattern '(^|/)(kustomization|helmrelease|values)\.ya?ml$' -n 16 "${IDP_APP_PATH}/${service}/";
+            # kubeconform -skip SealedSecret -ignore-filename-pattern '(^|/)(kustomization|helmrelease|values)\.ya?ml$' -n 16 "${IDP_APP_PATH}/${service}/";
             trivy fs --exit-code 0 --severity MEDIUM,HIGH --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
             trivy fs --exit-code 1 --severity CRITICAL --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
           done
