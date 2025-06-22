@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2025-06-22
+
+### Added
+
+- Add checksum to Kubernetes manifests, in the cd_docker template, to facilitate the identification of manifests that need to be processed by deployment tools (**Refs**: `main` and `v1`)
+
 ## 2025-05-27
 
 ### Added
