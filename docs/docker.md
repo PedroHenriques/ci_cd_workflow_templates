@@ -126,13 +126,14 @@ Besides the secrets and environment variables defined in your application reposi
 - `ENVIRONMENT`: Github environment to deploy to
 - `NAMESPACE`: The Kubernetes namespace
 - `SERVICE`: The name of the service being processed (in lowercase)
+- `BUILD_TIMESTAMP`: The epoch timestamp of the build
 
 Example of a manifest file with placeholders:
 ```
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ${SERVICE}-config
+  name: ${SERVICE}-config-${BUILD_TIMESTAMP}
   namespace: ${NAMESPACE}
   labels:
     app: ${SERVICE}

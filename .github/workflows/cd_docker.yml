@@ -117,6 +117,8 @@ jobs:
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)";
           brew install kubeconform trivy;
 
+          export BUILD_TIMESTAMP=$(date +%s);
+
           IDP_APP_PATH="${{ steps.prepare-idp-repo-clone.outputs.IDP_APP_PATH }}";
 
           KUSTOMIZATION_APP_FILE_PATH="${IDP_APP_PATH}/kustomization.yaml";
