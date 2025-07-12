@@ -114,6 +114,8 @@ jobs:
           ${{ insert }}: ${{ vars }}
           ${{ insert }}: ${{ secrets }}
         run: >-
+          trap '' PIPE;
+
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)";
           brew install kubeconform trivy;
 
@@ -168,12 +170,19 @@ jobs:
                 printf -- "- ${FILE_NAME}\n" >> ${KUSTOMIZATION_APP_SERVICE_PATH};
               fi
 
-              KIND=$(yq e '.kind // ""' "${file}");
-
-              if [[ -z "${KIND}" ]]; then
-                echo "Skipping manifest pos-processing for file '${file}' — no .kind detected, not a Kubernetes manifest."
-                continue
+              if [[ $(yq e 'select(tag == "!!map") | has("kind")' "${file}" | grep -c true || true) -gt 0 ]] && \
+                 [[ $(yq e 'select(tag == "!!map") | has("apiVersion")' "${file}" | grep -c true || true) -gt 0 ]]; then
+                HAS_K8S_MANIFEST=true;
+              else
+                HAS_K8S_MANIFEST=false;
               fi
+
+              if [[ "${HAS_K8S_MANIFEST}" != "true" ]]; then
+                echo "Skipping manifest post-processing for file '${file}' — no valid Kubernetes manifest found.";
+                continue;
+              fi
+
+              KIND=$(yq e 'select(tag == "!!map" and has("kind") and has("apiVersion")) | .kind' "${file}" | head -n 1 || true);
 
               if [[ "${KIND}" == "Secret" ]]; then
                 echo "Processing file '${file}' as a secret.";
@@ -193,9 +202,10 @@ jobs:
               else
                 yq e ".metadata.annotations.\"checksum/config\" = \"${CONFIG_HASH}\"" -i "${IDP_REPO_FILE_PATH}";
               fi
+              
+              kubeconform -skip SealedSecret --ignore-missing-schemas -n 16 "${IDP_REPO_FILE_PATH}";
             done
 
-            # kubeconform -skip SealedSecret -ignore-filename-pattern '(^|/)(kustomization|helmrelease|values)\.ya?ml$' -n 16 "${IDP_APP_PATH}/${service}/";
             trivy fs --exit-code 0 --severity MEDIUM,HIGH --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
             trivy fs --exit-code 1 --severity CRITICAL --scanners vuln,secret,misconfig,license "${IDP_APP_PATH}/${service}/";
           done
