@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2025-07-12
+
+### Changed
+
+- Reactivated `kubeconform` tool, in the cd_docker template, with a more maintainable structure for handling non-kubernetes manifest files and custom manifest files (**Refs**: `main` and `v1`)
+
 ## 2025-06-22
 
 ### Added
