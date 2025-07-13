@@ -1,0 +1,114 @@
+name: analyse_k8s_manifest_changes
+on:
+  workflow_call:
+    inputs:
+      org_name:
+        required: true
+        type: string
+        description: "GitHub organization to ping team from PR title"
+      approval_team_name:
+        required: true
+        type: string
+        description: "GitHub Team to ping in case of approval needed (Format: ORG/TEAM)"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  analyse-manifest-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.OWN_REPO_TOKEN }}
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.OWN_REPO_TOKEN }}
+
+      - name: Set up tools
+        run: >-
+          YQ_VERSION="v4.43.1";
+          curl -L "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -o /usr/local/bin/yq;
+          chmod +x /usr/local/bin/yq;
+          yq --version;
+
+      - name: Detect cluster resource changes
+        run: >-
+          set -euo pipefail;
+
+          BASE_COMMIT="${{ github.event.pull_request.base.sha }}";
+          HEAD_COMMIT="${{ github.event.pull_request.head.sha }}";
+          PR_URL="${{ github.event.pull_request.html_url }}";
+
+          TMP_DIFF_FILE="resource_changes.txt";
+          > "${TMP_DIFF_FILE}";
+
+          echo "Fetching PR base and head commits...";
+          git fetch origin "${BASE_COMMIT}";
+          git fetch origin "${HEAD_COMMIT}";
+
+          echo "Finding changed YAML files...";
+          CHANGED_FILES=$(git diff --name-only "${BASE_COMMIT}" "${HEAD_COMMIT}" -- '*.yaml' '*.yml');
+
+          echo "Changed files:";
+          echo "${CHANGED_FILES}";
+
+          RESOURCE_FIELDS=(
+            '.kind'
+            '.spec.replicas'
+            '.spec.ports[].port'
+            '.spec.ports[].targetPort'
+            '.spec.template.spec.containers[].resources.requests.cpu'
+            '.spec.template.spec.containers[].resources.requests.memory'
+            '.spec.template.spec.containers[].resources.limits.cpu'
+            '.spec.template.spec.containers[].resources.limits.memory'
+          );
+
+          for file in $CHANGED_FILES; do
+            if [ ! -f "${file}" ]; then
+              echo "Skipping file ${file} since it was deleted.";
+              continue;
+            fi
+
+            if ! yq e 'select(has("kind") and has("apiVersion")) | .kind' "${file}" >/dev/null 2>&1; then
+              echo "Skipping file ${file} since it is not a Kubernetes manifest.";
+              continue;
+            fi
+
+            echo "Checking resource-related changes in ${file}...";
+
+            for field in "${RESOURCE_FIELDS[@]}"; do
+              BASE_VAL=$(git show "${BASE_COMMIT}:${file}" 2>/dev/null | yq e "${field}" - 2>/dev/null || true);
+              HEAD_VAL=$(yq e "${field}" "${file}" 2>/dev/null || true);
+
+              if [[ "${BASE_VAL}" != "${HEAD_VAL}" ]]; then
+                echo "${file}: ${field} changed" >> "${TMP_DIFF_FILE}";
+                echo "  from: ${BASE_VAL}" >> "${TMP_DIFF_FILE}";
+                echo "  to:   ${HEAD_VAL}" >> "${TMP_DIFF_FILE}";
+              fi
+            done
+          done
+
+          if [[ -s "${TMP_DIFF_FILE}" ]]; then
+            echo "⚠️ Resource-affecting changes found. Requiring DevOps review.";
+            echo '```diff';
+            cat "${TMP_DIFF_FILE}";
+            echo '```';
+
+            MENTION="@${{ inputs.approval_team_name }}";
+            COMMENT_BODY=$(printf "${MENTION}\n\n⚠️ Cluster-affecting changes were detected:\n\n\`\`\`diff\n%s\n\`\`\`\nPlease review." "$(cat $TMP_DIFF_FILE)");
+            gh pr comment "${PR_URL}" --body "${COMMENT_BODY}";
+          else
+            echo "✅ No resource-affecting changes detected. Auto-approving.";
+            gh pr review "${PR_URL}" --approve --body "✅ Auto-approved: No changes affecting cluster resources were found.";
+            
+            PR_TITLE=$(gh pr view "${PR_URL}" --json title -q .title);
+            TEAM_NAME=$(echo "${PR_TITLE}" | grep -o "'[^']*'" | sed "s/'//g");
+            MENTION="@${{ inputs.org_name }}/${TEAM_NAME}";
+            COMMENT_BODY=$(printf "${MENTION}\n\n✅ No cluster-impacting changes detected. This PR was auto-approved.");
+            gh pr comment "${PR_URL}" --body "${COMMENT_BODY}";
+          fi
