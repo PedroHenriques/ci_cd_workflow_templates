@@ -27,6 +27,17 @@ These templates expect the following `secrets` to be configured in your applicat
 | ----------- | ----------- | ----------- |
 | `OWN_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to approve and comment in pull requests in the manifest repository |
 
+#### `OWN_REPO_TOKEN` permissions:
+
+The token must have the following permissions:
+
+| Scope              | Purpose                                      |
+| ------------------ | -------------------------------------------- |
+| `repo`             | Full access to private repositories          |
+| `public_repo`      | (Optional) If only working with public repos |
+| `write:discussion` | Allows writing comments on PRs               |
+| `read:org`         | If you use org-level repo access (optional)  |
+
 ## Analyse K8s manifest changes template
 
 ### Inputs
