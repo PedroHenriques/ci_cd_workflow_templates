@@ -88,3 +88,4 @@ If you use a template and specify the directory `src` as the "source directory" 
 | Javascript Package | Use these templates if your application requires building and deploying JS packages to a package manager | `@main`<br>`@v1` | [doc](/docs/js_package.md) |
 | .Net Package | Use these templates if your application requires building and deploying .Net packages to a package manager | `@main`<br>`@v1` | [doc](/docs/dotnet_package.md) |
 | Repository maintenance | Use this template to run maintenance jobs on application repositories | `@main`<br>`@v1` | [doc](/docs/repo_maintenance.md) |
+| Kubernetes manifest analyser | Use this template if you want to analyse PRs with kubernetes manifest file changes and automatically approve those PRs based on cluster resource impact | `@main`<br>`@v1` | [doc](/docs/analyse_k8s_manifest_changes.md) |
