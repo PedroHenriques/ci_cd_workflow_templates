@@ -2,10 +2,6 @@ name: analyse_k8s_manifest_changes
 on:
   workflow_call:
     inputs:
-      org_name:
-        required: true
-        type: string
-        description: "GitHub organization to ping team from PR title"
       approval_team_name:
         required: true
         type: string
@@ -108,7 +104,7 @@ jobs:
             
             PR_TITLE=$(gh pr view "${PR_URL}" --json title -q .title);
             TEAM_NAME=$(echo "${PR_TITLE}" | grep -o "'[^']*'" | sed "s/'//g");
-            MENTION="@${{ inputs.org_name }}/${TEAM_NAME}";
+            MENTION="@${TEAM_NAME}";
             COMMENT_BODY=$(printf "${MENTION}\n\n✅ No cluster-impacting changes detected. This PR was auto-approved.");
             gh pr comment "${PR_URL}" --body "${COMMENT_BODY}";
           fi
