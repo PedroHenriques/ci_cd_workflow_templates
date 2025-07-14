@@ -17,7 +17,7 @@ The template will:
 ### Github application team name
 
 This template assumes that the name of the application team, related to the pull request that was opened, is available in the pull request title between single quotes.
-**Ex:** For a pull request with the title `Deploy for the project 'ci_cd_test'`, this template will assume the application Github team name is `ci_cd_test`
+**Ex:** For a pull request with the title `Deploy for the project ci_cd_test and team 'PedroHenriques/ci_cd_test'`, this template will assume the application Github team name is `PedroHenriques/ci_cd_test`
 
 ### Secrets
 
@@ -43,7 +43,6 @@ The token must have the following permissions:
 ### Inputs
 | Name | Required | Description |
 | ----------- | ----------- | ----------- |
-| `org_name` | Yes | GitHub organization to ping team from PR title |
 | `approval_team_name` | Yes | GitHub Team to ping in case of approval needed (Format: ORG/TEAM) |
 
 ## Example of using these templates
@@ -79,7 +78,6 @@ jobs:
   ci:
     uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/analyse_k8s_manifest_changes.yml@v1
     with:
-      org_name: PedroHenriques
       approval_team_name: PedroHenriques/DEVOPS
     secrets: inherit
 ```
