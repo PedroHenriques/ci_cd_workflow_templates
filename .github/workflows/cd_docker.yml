@@ -229,10 +229,10 @@ jobs:
           fi
 
           git add .;
-          git commit -m "Commit from the CD workflow of the project '${{ vars.PROJECT_NAME }}'." || true;
+          git commit -m "Commit from the CD workflow of the project ${{ vars.PROJECT_NAME }} and team '${{ vars.APP_GITHUB_TEAM }}'." || true;
           git push origin ${BRANCH_NAME};
 
-          PR_TITLE="Deploy for the project '${{ vars.PROJECT_NAME }}'";
+          PR_TITLE="Deploy for the project ${{ vars.PROJECT_NAME }} and team '${{ vars.APP_GITHUB_TEAM }}'";
           PR_BODY="PR from CD workflow of the project '${{ vars.PROJECT_NAME }}'.";
 
           PR_LIST=$(gh pr list -B main -H ${BRANCH_NAME} -S "is:open ${PR_TITLE} in:title");
