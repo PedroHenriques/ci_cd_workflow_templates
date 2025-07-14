@@ -83,6 +83,7 @@ These templates expect the following `env vars` to be configured in your applica
 | `SEALED_SECRET_CTRL_NAMESPACE` | Yes | The control namespace of the Sealed Secret installed in the AKS |
 | `SEALED_SECRET_CTRL_NAME` | Yes | The control name of the Sealed Secret installed in the AKS |
 | `NUM_TAGS_TO_KEEP` | No | The number of tags, per image, to keep.<br>If present will trigger a prune of the container registry to which Docker images are being pushed, in order to keep at maximum the specified number of tags |
+| `APP_GITHUB_TEAM` | No | The Github team name of the application (format: Format: ORG/TEAM).<br>Will be used to ping the relevant team in PR comments. |
 
 ## CI template
 
