@@ -40,6 +40,30 @@ defaults:
     shell: bash
 
 jobs:
+  comment-on-pr-labels:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' }}
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.OWN_REPO_TOKEN }}
+
+      - name: Add comment to PR about labels and deployments
+        env:
+          GITHUB_TOKEN: ${{ secrets.OWN_REPO_TOKEN }}
+        run: >-
+          git config user.name github-actions[bot];
+          git config user.email github-actions[bot]@users.noreply.github.com;
+
+          PR_ID=${{ github.event.pull_request.number }};
+          COMMENT_BODY="By default the CI/CD pipeline will trigger a deployment only for the services that have changed with this pull request.<br>To trigger a deploy of all services, regardless of whether they have changed files or not, ensure that this PR has the following label: '${{ inputs.deploy_all_services_label_name }}'";
+
+          echo -e "${COMMENT_BODY}" > pr_body;
+          echo "PR with number '${PR_ID}' opened. Leaving a comment about PR labels and deployments.";
+          export pr_body=$(cat pr_body); gh pr comment "${PR_ID}" -b "$pr_body";
+
   linter-and-tests:
     uses: ./.github/workflows/linter-tests.yml
     with:
@@ -118,7 +142,7 @@ jobs:
 
             echo "Processing repo: ${REPO}";
 
-            TAGS=$(az acr repository show-tags --name "${{ vars.ACR_NAME }}" --repository "${REPO}" --orderby time_asc --output json);
+            TAGS=$(az acr repository show-tags --name "${{ vars.ACR_NAME }}" --repository "${REPO}" --orderby time_asc --output json 2>/dev/null || echo '[]');
             TAGS=($(echo "${TAGS}" | jq -r '.[]')); # Convert JSON into bash array
             echo "Found tags: ${TAGS[@]}";
 
