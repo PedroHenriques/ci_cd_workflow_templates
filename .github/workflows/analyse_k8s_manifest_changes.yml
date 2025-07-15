@@ -56,6 +56,10 @@ jobs:
           RESOURCE_FIELDS=(
             '.kind'
             '.spec.replicas'
+            '.spec.minReplicas'
+            '.spec.maxReplicas'
+            '.spec.metrics'
+            '.spec.behavior'
             '.spec.ports[].port'
             '.spec.ports[].targetPort'
             '.spec.template.spec.containers[].resources.requests.cpu'
@@ -81,8 +85,11 @@ jobs:
               BASE_VAL=$(git show "${BASE_COMMIT}:${file}" 2>/dev/null | yq e "${field}" - 2>/dev/null || true);
               HEAD_VAL=$(yq e "${field}" "${file}" 2>/dev/null || true);
 
+              KIND=$(yq e '.kind' "$file" 2>/dev/null || echo "Unknown")
+              NAME=$(yq e '.metadata.name' "$file" 2>/dev/null || echo "Unnamed")
+
               if [[ "${BASE_VAL}" != "${HEAD_VAL}" ]]; then
-                echo "${file}: ${field} changed" >> "${TMP_DIFF_FILE}";
+                echo "${file} ($KIND/$NAME): ${field} changed" >> "${TMP_DIFF_FILE}";
                 echo "  from: ${BASE_VAL}" >> "${TMP_DIFF_FILE}";
                 echo "  to:   ${HEAD_VAL}" >> "${TMP_DIFF_FILE}";
               fi
