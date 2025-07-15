@@ -5,6 +5,8 @@
 There are 2 templates, one for CI and one for CD, which are meant to be used together.
 
 The CI template will:
+- If the trigger of the workflow is a `pull request opened`
+  - Leave a comment on the pull request explaining how to trigger a full deployment.
 - On any trigger:
   - Run static code analysis, on every trigger of the workflow
   - Run automated tests, on every trigger of the workflow
@@ -67,6 +69,7 @@ These templates expect the following `secrets` to be configured in your applicat
 | `AZURE_SUBSCRIPTION_ID` | Yes | The subscription ID of the ACR where the Docker images will be stored |
 | `AZURE_TENANT_ID` | Yes | The tenant ID of the ACR where the Docker images will be stored |
 | `IDP_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to commit and open pull requests in the git repository where the manifest files will be delivered to |
+| `OWN_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to comment in pull requests in your application repository |
 
 ### Environment Variables
 
