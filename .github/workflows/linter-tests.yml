@@ -26,9 +26,15 @@ jobs:
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --unit --cicd; else echo "No test.sh file found."; fi
 
       - name: Run integration tests
+        env:
+          ${{ insert }}: ${{ vars }}
+          ${{ insert }}: ${{ secrets }}
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --integration --cicd; else echo "No test.sh file found."; fi
 
       - name: Run E2E tests
+        env:
+          ${{ insert }}: ${{ vars }}
+          ${{ insert }}: ${{ secrets }}
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --e2e --cicd; else echo "No test.sh file found."; fi
 
       - name: Run test coverage
