@@ -27,10 +27,23 @@ jobs:
         with:
           token: ${{ secrets.OWN_REPO_TOKEN }}
 
+      - name: Map template type to template repo path
+        id: map_template
+        run: |
+          case "${{ inputs.template_type }}" in
+            dotnet)
+              echo "repo_path=PedroHenriques/dotnet_ms_template" >> $GITHUB_OUTPUT;;
+            javascript_fe)
+              echo "repo_path=PedroHenriques/javascript_fe_template" >> $GITHUB_OUTPUT;;
+            *)
+              echo "Invalid template_type: ${{ inputs.template_type }}";
+              exit 1;;
+          esac
+
       - name: actions-template-sync
         uses: AndreasAugustin/actions-template-sync@v2
         with:
-          source_repo_path: PedroHenriques/dotnet_ms_template
+          source_repo_path: ${{ steps.map_template.outputs.repo_path }}
           upstream_branch: main
           source_gh_token: ${{ secrets.TEMPLATE_REPO_TOKEN }}
           target_gh_token: ${{ secrets.OWN_REPO_TOKEN }}
@@ -48,8 +61,12 @@ jobs:
 
       - name: Update dependencies
         run: >-
-          chmod +x ./cli/dependencies_update.sh;
-          ./cli/dependencies_update.sh --cicd -u -y;
+          if [ -f ./cli/dependencies_update.sh ]; then
+            chmod +x ./cli/dependencies_update.sh;
+            ./cli/dependencies_update.sh --cicd -u -y;
+          else
+            echo "No dependencies_update.sh file found.";
+          fi
 
       - name: Open PR with bumped versions
         env:
