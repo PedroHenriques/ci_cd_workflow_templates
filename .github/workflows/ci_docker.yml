@@ -68,6 +68,7 @@ jobs:
     uses: ./.github/workflows/linter-tests.yml
     with:
       environment: ${{ inputs.environment }}
+    secrets: inherit
 
   categorize-changed-services:
     needs: linter-and-tests
