@@ -61,8 +61,12 @@ jobs:
 
       - name: Update dependencies
         run: >-
-          chmod +x ./cli/dependencies_update.sh;
-          ./cli/dependencies_update.sh --cicd -u -y;
+          if [ -f ./cli/dependencies_update.sh ]; then
+            chmod +x ./cli/dependencies_update.sh;
+            ./cli/dependencies_update.sh --cicd -u -y;
+          else
+            echo "No dependencies_update.sh file found.";
+          fi
 
       - name: Open PR with bumped versions
         env:
