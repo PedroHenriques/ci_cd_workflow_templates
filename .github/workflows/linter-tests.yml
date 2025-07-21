@@ -37,12 +37,24 @@ jobs:
           ${{ insert }}: ${{ secrets }}
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --e2e --cicd; else echo "No test.sh file found."; fi
 
+      - name: Begin SonarCloud analysis
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJ_KEY: ${{ vars.SONAR_PROJ_KEY }}
+          SONAR_ORG: ${{ vars.SONAR_ORG }}
+          TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
+          TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
+        run: if [ -f "./cli/sonar.sh" ]; then chmod +x ./cli/sonar.sh; ./cli/sonar.sh --cicd --start; else echo "No sonar.sh file found."; fi
+
       - name: Run test coverage
+        env:
+          TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
+          TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
         run: if [ -f "./cli/coverage.sh" ]; then chmod +x ./cli/coverage.sh; ./cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
 
-      # - name: Push test coverage to remote
-      #   uses: coverallsapp/github-action@master
-      #   with:
-      #     github-token: ${{ secrets.GITHUB_TOKEN }}
-      #     path-to-lcov: "./coverage/coverage.lcov"
-      #     flag-name: "unit"
+      - name: End SonarCloud analysis
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: if [ -f "./cli/sonar.sh" ]; then chmod +x ./cli/sonar.sh; ./cli/sonar.sh --cicd --end; else echo "No sonar.sh file found."; fi
