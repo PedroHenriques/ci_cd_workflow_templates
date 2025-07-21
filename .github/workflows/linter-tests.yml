@@ -37,8 +37,19 @@ jobs:
           ${{ insert }}: ${{ secrets }}
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --e2e --cicd; else echo "No test.sh file found."; fi
 
+      - name: Detect if SONAR_TOKEN is present
+        id: detect-sonar
+        run: >-
+          if [ -n "${{ secrets.sonar_token }}" ]; then
+            echo "Sonar token is set"
+            echo "has_sonar=true" >> $GITHUB_OUTPUT
+          else
+            echo "Sonar token is NOT set"
+            echo "has_sonar=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Begin SonarCloud analysis
-        if: ${{ secrets.SONAR_TOKEN != '' }}
+        if: ${{ steps.detect-sonar.outputs.has_sonar == 'true' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_PROJ_KEY: ${{ vars.SONAR_PROJ_KEY }}
@@ -54,7 +65,7 @@ jobs:
         run: if [ -f "./cli/coverage.sh" ]; then chmod +x ./cli/coverage.sh; ./cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
 
       - name: End SonarCloud analysis
-        if: ${{ secrets.SONAR_TOKEN != '' }}
+        if: ${{ steps.detect-sonar.outputs.has_sonar == 'true' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: if [ -f "./cli/sonar.sh" ]; then chmod +x ./cli/sonar.sh; ./cli/sonar.sh --cicd --end; else echo "No sonar.sh file found."; fi
