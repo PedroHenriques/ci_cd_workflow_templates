@@ -54,6 +54,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_PROJ_KEY: ${{ vars.SONAR_PROJ_KEY }}
           SONAR_ORG: ${{ vars.SONAR_ORG }}
+          SONAR_HOST: ${{ vars.SONAR_HOST }}
           TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
           TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
         run: if [ -f "./cli/sonar.sh" ]; then chmod +x ./cli/sonar.sh; ./cli/sonar.sh --cicd --start; else echo "No sonar.sh file found."; fi
