@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2025-07-23
+
+### Changed
+
+- Add step to the `linter-tests.yml` template to integrate with an external static code analysis tool (Ex: Sonar) (**Refs**: `main` and `v1`)
+
 ## 2025-07-15
 
 ### Added
