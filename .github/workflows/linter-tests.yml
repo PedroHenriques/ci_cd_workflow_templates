@@ -46,7 +46,7 @@ jobs:
       - name: Detect if SONAR_TOKEN is present
         id: detect-sonar
         run: >-
-          if [ -n "${{ secrets.sonar_token }}" ]; then
+          if [ -n "${{ secrets.EXTERNAL_STATIC_ANALYSIS_TOKEN }}" ]; then
             echo "Sonar token is set"
             echo "has_sonar=true" >> $GITHUB_OUTPUT
           else
@@ -57,10 +57,10 @@ jobs:
       - name: External static analysis
         if: ${{ steps.detect-sonar.outputs.has_sonar == 'true' }}
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_PROJ_KEY: ${{ vars.SONAR_PROJ_KEY }}
-          SONAR_ORG: ${{ vars.SONAR_ORG }}
-          SONAR_HOST: ${{ vars.SONAR_HOST }}
+          EXTERNAL_STATIC_ANALYSIS_TOKEN: ${{ secrets.EXTERNAL_STATIC_ANALYSIS_TOKEN }}
+          EXTERNAL_STATIC_ANALYSIS_PROJ_KEY: ${{ vars.EXTERNAL_STATIC_ANALYSIS_PROJ_KEY }}
+          EXTERNAL_STATIC_ANALYSIS_ORG: ${{ vars.EXTERNAL_STATIC_ANALYSIS_ORG }}
+          EXTERNAL_STATIC_ANALYSIS_HOST: ${{ vars.EXTERNAL_STATIC_ANALYSIS_HOST }}
           TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
           TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
         run: if [ -f "./cli/external_static_analysis.sh" ]; then chmod +x ./cli/external_static_analysis.sh; ./cli/external_static_analysis.sh --cicd; else echo "No external_static_analysis.sh file found."; fi
