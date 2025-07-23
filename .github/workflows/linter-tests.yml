@@ -43,19 +43,19 @@ jobs:
           TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
         run: if [ -f "./cli/coverage.sh" ]; then chmod +x ./cli/coverage.sh; ./cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
 
-      - name: Detect if SONAR_TOKEN is present
-        id: detect-sonar
+      - name: Detect if an external static analysis tool is configured
+        id: detect-static-analysis-tool
         run: >-
           if [ -n "${{ secrets.EXTERNAL_STATIC_ANALYSIS_TOKEN }}" ]; then
-            echo "Sonar token is set"
-            echo "has_sonar=true" >> $GITHUB_OUTPUT
+            echo "External static code analysis token is set"
+            echo "has_external_tool=true" >> $GITHUB_OUTPUT
           else
-            echo "Sonar token is NOT set"
-            echo "has_sonar=false" >> $GITHUB_OUTPUT
+            echo "External static code analysis token is NOT set"
+            echo "has_external_tool=false" >> $GITHUB_OUTPUT
           fi
 
       - name: External static analysis
-        if: ${{ steps.detect-sonar.outputs.has_sonar == 'true' }}
+        if: ${{ steps.detect-static-analysis-tool.outputs.has_external_tool == 'true' }}
         env:
           EXTERNAL_STATIC_ANALYSIS_TOKEN: ${{ secrets.EXTERNAL_STATIC_ANALYSIS_TOKEN }}
           EXTERNAL_STATIC_ANALYSIS_PROJ_KEY: ${{ vars.EXTERNAL_STATIC_ANALYSIS_PROJ_KEY }}
