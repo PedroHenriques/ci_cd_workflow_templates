@@ -78,6 +78,7 @@ jobs:
     uses: ./.github/workflows/linter-tests.yml
     with:
       environment: ${{ inputs.environment }}
+    secrets: inherit
 
   determine-version-bump:
     needs: linter-and-tests
