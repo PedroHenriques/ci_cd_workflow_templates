@@ -37,6 +37,12 @@ jobs:
           ${{ insert }}: ${{ secrets }}
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --e2e --cicd; else echo "No test.sh file found."; fi
 
+      - name: Run test coverage
+        env:
+          TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
+          TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
+        run: if [ -f "./cli/coverage.sh" ]; then chmod +x ./cli/coverage.sh; ./cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
+
       - name: Detect if SONAR_TOKEN is present
         id: detect-sonar
         run: >-
@@ -48,7 +54,7 @@ jobs:
             echo "has_sonar=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Begin SonarCloud analysis
+      - name: External static analysis
         if: ${{ steps.detect-sonar.outputs.has_sonar == 'true' }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -57,21 +63,4 @@ jobs:
           SONAR_HOST: ${{ vars.SONAR_HOST }}
           TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
           TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
-        run: if [ -f "./cli/sonar.sh" ]; then chmod +x ./cli/sonar.sh; ./cli/sonar.sh --cicd --start; else echo "No sonar.sh file found."; fi
-
-      - name: Run test coverage
-        env:
-          TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
-          TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
-        run: if [ -f "./cli/coverage.sh" ]; then chmod +x ./cli/coverage.sh; ./cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
-
-      - name: End SonarCloud analysis
-        if: ${{ steps.detect-sonar.outputs.has_sonar == 'true' }}
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_PROJ_KEY: ${{ vars.SONAR_PROJ_KEY }}
-          SONAR_ORG: ${{ vars.SONAR_ORG }}
-          SONAR_HOST: ${{ vars.SONAR_HOST }}
-          TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
-          TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
-        run: if [ -f "./cli/sonar.sh" ]; then chmod +x ./cli/sonar.sh; ./cli/sonar.sh --cicd --end; else echo "No sonar.sh file found."; fi
+        run: if [ -f "./cli/external_static_analysis.sh" ]; then chmod +x ./cli/external_static_analysis.sh; ./cli/external_static_analysis.sh --cicd; else echo "No external_static_analysis.sh file found."; fi
