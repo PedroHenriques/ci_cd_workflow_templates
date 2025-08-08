@@ -177,7 +177,7 @@ jobs:
             sed -i '1s/^\xEF\xBB\xBF//' "${PROJ_FILE}";
             yq -p=xml -o=xml -i ".Project.PropertyGroup.Version = \"${NEW_VERSION}\"" "$PROJ_FILE";
 
-            dotnet pack -o release "${GITHUB_WORKSPACE}/${{ inputs.source_dir_name }}/${service}";
+            dotnet pack -c Release -o release "${GITHUB_WORKSPACE}/${{ inputs.source_dir_name }}/${service}";
           done
 
           dotnet nuget push release/ -s https://api.nuget.org/v3/index.json -k ${NUGET_AUTH_TOKEN} --skip-duplicate;
