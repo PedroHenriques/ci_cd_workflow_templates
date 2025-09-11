@@ -107,6 +107,8 @@ These templates expect the following `env vars` to be configured in your applica
 | `custom_service_file_pattern` | Yes | File pattern, inside each service, to a file that identifies a service as a custom service |
 | `build_file_pattern` | Yes | File pattern, inside each service, to a file that identifies a service needing to be built |
 | `deploy_all_services_label_name` | No | Name of the PR label that signals that all deployable services should be deployed, regardless of changed files |
+| `runner_group` | No | The runner group to use for executing the linter and test steps |
+| `runner_labels` | No | The runner labels to use for executing the linter and test steps |
 
 ### Outputs
 | Name | Description |

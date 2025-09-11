@@ -30,6 +30,14 @@ on:
         required: false
         type: string
         description: "Name of the PR label that signals that all deployable services should be deployed, regardless of changed files"
+      runner_group:
+        type: string
+        required: false
+        default: ""
+      runner_labels:
+        type: string
+        required: false
+        default: '["ubuntu-latest"]'
     outputs:
       img_tag:
         description: "The tag of the pushed images"
@@ -68,6 +76,8 @@ jobs:
     uses: ./.github/workflows/linter-tests.yml
     with:
       environment: ${{ inputs.environment }}
+      runner_group: ${{ inputs.runner_group }}
+      runner_labels: ${{ inputs.runner_labels }}
     secrets: inherit
 
   categorize-changed-services:
