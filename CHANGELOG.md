@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2025-09-11
+
+### Added
+
+- Add support for requesting that the `lint-tests.yml` template use a specific runner (**Refs**: `main` and `v1`)
+
 ## 2025-07-23
 
 ### Changed
