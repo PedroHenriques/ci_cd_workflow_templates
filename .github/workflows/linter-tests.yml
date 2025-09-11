@@ -6,6 +6,14 @@ on:
         type: string
         description: "Github environment to deploy to"
         required: true
+      runner_group:
+        type: string
+        required: false
+        default: ""
+      runner_labels:
+        type: string
+        required: false
+        default: '["ubuntu-latest"]'
 
 defaults:
   run:
@@ -13,7 +21,7 @@ defaults:
 
 jobs:
   linter-and-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner_group != '' && fromJSON(format('{{"group":"{0}","labels":{1}}}', inputs.runner_group, inputs.runner_labels)) || fromJSON(inputs.runner_labels) }}
     environment: ${{ inputs.environment }}
     steps:
       - name: Clone repo
