@@ -7,6 +7,8 @@ There is 1 template.
 The template will:
 - Syncronize the application repository with a template  repository:
   - For `.Net applications` it will sync with the [.Net template repository](https://github.com/PedroHenriques/dotnet_ms_template)
+  - For `Golang applications` it will sync with the [Golang template repository](https://github.com/PedroHenriques/golang_ms_template)
+  - For `Frontend Javascript applications` it will sync with the [FE Javascript template repository](https://github.com/PedroHenriques/javascript_fe_template)
 - Invoke the script, in the application repository, that will check for dependency version updates and update them
 
 For each of the jobs the pipeline will open a pull request if there  are changes detected.
