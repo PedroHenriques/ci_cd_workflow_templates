@@ -5,7 +5,7 @@ on:
       template_type:
         required: true
         type: string
-        description: "One of: 'dotnet' | 'javascript_fe'"
+        description: "One of: 'dotnet' | 'javascript_fe' | 'golang'"
       pr_reviewers:
         required: true
         type: string
@@ -35,6 +35,8 @@ jobs:
               echo "repo_path=PedroHenriques/dotnet_ms_template" >> $GITHUB_OUTPUT;;
             javascript_fe)
               echo "repo_path=PedroHenriques/javascript_fe_template" >> $GITHUB_OUTPUT;;
+            golang)
+              echo "repo_path=PedroHenriques/golang_ms_template" >> $GITHUB_OUTPUT;;
             *)
               echo "Invalid template_type: ${{ inputs.template_type }}";
               exit 1;;
