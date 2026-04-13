@@ -77,8 +77,8 @@ These templates expect the following `env vars` to be configured in your applica
 | `minor_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a MINOR version bump |
 | `patch_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a PATCH version bump |
 | `deploy_all_services_label_name` | No | Name of the PR label that signals that all deployable services should be deployed, regardless of changed files |
-| `runner_group` | No | The runner group to use for executing the linter and test steps |
-| `runner_labels` | No | The runner labels to use for executing the linter and test steps |
+| `runner_group` | No | The Github hosted runner group that will be used to run this pipeline |
+| `runner_labels` | No | The Github hosted runner labels that will be used when choosing valid runners to run this pipeline |
 
 ## Example of using these templates
 
@@ -115,7 +115,7 @@ on:
 
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_test_templates/.github/workflows/ci_dotnet_package.yml@v1
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/ci_dotnet_package.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
