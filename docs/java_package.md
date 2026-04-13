@@ -1,4 +1,4 @@
-# Templates for applications that require building and deploying .Net packages to a package manager
+# Templates for applications that require building and deploying Java packages to a package manager
 
 ## What these templates do
 
@@ -47,7 +47,10 @@ These templates expect the following `secrets` to be configured in your applicat
 | Name | Required | Description |
 | ----------- | ----------- | ----------- |
 | `OWN_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to commit and comment in pull requests and to push to the deployable branches in your application repository |
-| `NUGET_TOKEN` | Yes | A token to the Nuget account where the packages will be published to |
+| `MAVEN_GPG_PRIVATE_KEY` | Yes | The ASCII-armored GPG private key used to sign Maven artifacts before publishing to Maven Central. This must match the public key registered with your Maven Central (Sonatype) account |
+| `MAVEN_GPG_PASSPHRASE` | Yes | The passphrase associated with the GPG private key used to sign artifacts |
+| `CENTRAL_PORTAL_USERNAME` | Yes | The username of the Sonatype Central Portal account (or generated user token name) used to authenticate artifact publishing |
+| `CENTRAL_PORTAL_PASSWORD` | Yes | The password or token value associated with the Sonatype Central Portal user token used for publishing artifacts |
 | `EXTERNAL_STATIC_ANALYSIS_TOKEN` | No | A token with permissions to send code data to the external static analysis tool (Ex: Sonar) |
 
 ### Environment Variables
@@ -77,6 +80,7 @@ These templates expect the following `env vars` to be configured in your applica
 | `minor_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a MINOR version bump |
 | `patch_version_label_name` | Yes | Name of the PR label that signals that a deployment should be made with a PATCH version bump |
 | `deploy_all_services_label_name` | No | Name of the PR label that signals that all deployable services should be deployed, regardless of changed files |
+| `java_version` | No | The Java version to use in the build and publish of this package |
 | `runner_group` | No | The Github hosted runner group that will be used to run this pipeline |
 | `runner_labels` | No | The Github hosted runner labels that will be used when choosing valid runners to run this pipeline |
 
@@ -91,19 +95,35 @@ Consider the following repo:
 │   ├── test.sh
 ├── src
 │   ├── package1
-│   │   ├── Services
-│   │   │   ├── Myservice.cs
-│   │   ├── Program.cs
-│   │   ├── build.txt
-│   │   ├── package1.csproj
+│   │   ├── src
+│   │   |   ├── main
+│   │   |   |   ├── java
+│   │   |   |   |   ├── com
+│   │   |   |   |   |   ├── pedrojhenriques
+│   │   │   │   │   │   │   ├── Services
+│   │   │   │   │   │   │   │   ├── Myservice.java
+│   │   │   │   │   │   │   ├── main.java
+│   │   │   ├── build.txt
+│   │   │   ├── pom.xml
 │   ├── package2
-│   │   ├── Program.cs
-│   │   ├── build.txt
-│   │   ├── package2.csproj
+│   │   ├── src
+│   │   |   ├── main
+│   │   |   |   ├── java
+│   │   |   |   |   ├── com
+│   │   |   |   |   |   ├── pedrojhenriques
+│   │   │   │   │   │   │   ├── main.java
+│   │   │   ├── build.txt
+│   │   │   ├── pom.xml
 │   ├── sharedLibs
-│   │   ├── SomeService.cs
-│   │   ├── sharedLibs.csproj
+│   │   ├── src
+│   │   |   ├── main
+│   │   |   |   ├── java
+│   │   |   |   |   ├── com
+│   │   |   |   |   |   ├── pedrojhenriques
+│   │   │   │   │   │   │   ├── main.java
+│   │   │   ├── pom.xml
 └── .gitignore
+└── pom.xml
 ```
 
 The file `.github/workflows/pipeline.yml` has the following content
@@ -115,13 +135,13 @@ on:
 
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/ci_dotnet_package.yml@v1
+    uses: PedroHenriques/ci_cd_test_templates/.github/workflows/ci_java_package.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
       source_dir_name: 'src'
       deployment_file-or-dir_path: 'build.txt'
-      custom_service_file_pattern: '*.csproj'
+      custom_service_file_pattern: 'pom.xml'
       build_file_pattern: 'build.txt'
       major_version_label_name: 'major'
       minor_version_label_name: 'minor'
@@ -136,11 +156,11 @@ With this directory structure:
 - The services that require building a package are `package1` and `package2`, since they have a build file (input `build_file_pattern`)
 - The `sharedLibs` service is not deployable nor buildable, but is a custom service since it has a custom service file (input `custom_service_file_pattern`)
 
-This will trigger the `ci_dotnet_package.yml` template (on the ref `v1`) when
+This will trigger the `ci_java_package.yml` template (on the ref `v1`) when
 - a `pull request` is opened, edited, reopened, synchronized or closed
 
 The behaviour for the pipeline is:
-- Changes to a deployable service (input `deployment_file-or-dir_path`) that has a build file (input `build_file_pattern`) will trigger the package for that service to be built and published to Nuget
-- The `sharedLibs` service is considered a shared service, since it is not deployable and has a `*.csproj` file (input `custom_service_file_pattern`), so if it has changes all deployable services will be marked for deploy (even if they had no file changes)
+- Changes to a deployable service (input `deployment_file-or-dir_path`) that has a build file (input `build_file_pattern`) will trigger the package for that service to be built and published to Maven
+- The `sharedLibs` service is considered a shared service, since it is not deployable and has a `pom.xml` file (input `custom_service_file_pattern`), so if it has changes all deployable services will be marked for deploy (even if they had no file changes)
 
 **NOTE:** In this example we use an empty file named `build.txt` to identify the services to build and deploy.
