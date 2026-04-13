@@ -135,7 +135,7 @@ on:
 
 jobs:
   ci:
-    uses: PedroHenriques/ci_cd_test_templates/.github/workflows/ci_java_package.yml@v1
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/ci_java_package.yml@v1
     with:
       environment: "dev"
       deployable_branch_name: 'main'
