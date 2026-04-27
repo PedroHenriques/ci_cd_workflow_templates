@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-04-27
+
+### Added
+
+- `CI templates`: Input that allows skipping heavy test steps (**Refs**: `main` and `v1`)
+
 ## 2026-04-13
 
 ### Added
