@@ -50,6 +50,11 @@ on:
         type: string
         required: false
         default: '["ubuntu-latest"]'
+      skip_heavy_tests:
+        type: boolean
+        required: false
+        default: false
+        description: "If TRUE will skip integration and E2E tests."
 
 defaults:
   run:
@@ -88,6 +93,7 @@ jobs:
       environment: ${{ inputs.environment }}
       runner_group: ${{ inputs.runner_group }}
       runner_labels: ${{ inputs.runner_labels }}
+      skip_heavy_tests: ${{ inputs.skip_heavy_tests }}
     secrets: inherit
 
   determine-version-bump:

@@ -83,6 +83,7 @@ These templates expect the following `env vars` to be configured in your applica
 | `java_version` | No | The Java version to use in the build and publish of this package |
 | `runner_group` | No | The Github hosted runner group that will be used to run this pipeline |
 | `runner_labels` | No | The Github hosted runner labels that will be used when choosing valid runners to run this pipeline |
+| `skip_heavy_tests` | No | If TRUE will skip integration and E2E tests. |
 
 ## Example of using these templates
 

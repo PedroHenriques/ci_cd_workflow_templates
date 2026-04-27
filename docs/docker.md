@@ -109,6 +109,7 @@ These templates expect the following `env vars` to be configured in your applica
 | `deploy_all_services_label_name` | No | Name of the PR label that signals that all deployable services should be deployed, regardless of changed files |
 | `runner_group` | No | The Github hosted runner group that will be used to run this pipeline |
 | `runner_labels` | No | The Github hosted runner labels that will be used when choosing valid runners to run this pipeline |
+| `skip_heavy_tests` | No | If TRUE will skip integration and E2E tests. |
 
 ### Outputs
 | Name | Description |
