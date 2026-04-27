@@ -14,6 +14,11 @@ on:
         type: string
         required: false
         default: '["ubuntu-latest"]'
+      skip_heavy_tests:
+        type: boolean
+        required: false
+        default: false
+        description: "If TRUE will skip integration and E2E tests."
 
 defaults:
   run:
@@ -36,12 +41,14 @@ jobs:
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --unit --cicd; else echo "No test.sh file found."; fi
 
       - name: Run integration tests
+        if: ${{ inputs.skip_heavy_tests == false }}
         env:
           ${{ insert }}: ${{ vars }}
           ${{ insert }}: ${{ secrets }}
         run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --integration --cicd; else echo "No test.sh file found."; fi
 
       - name: Run E2E tests
+        if: ${{ inputs.skip_heavy_tests == false }}
         env:
           ${{ insert }}: ${{ vars }}
           ${{ insert }}: ${{ secrets }}
