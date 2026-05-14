@@ -1,0 +1,446 @@
+name: cd_to_ec2
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Github environment to deploy to"
+      source_dir_name:
+        required: true
+        type: string
+        description: "Name of the directory, relative to the repo's root, where the directories with source code of the service(s) is located"
+      deployment_file_name:
+        required: true
+        type: string
+        description: "Name of the file, inside each service, that indicates a service as deployable."
+      custom_service_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service as a custom service"
+      build_file_pattern:
+        required: true
+        type: string
+        description: "File pattern, inside each service, to a file that identifies a service needing to be built"
+      deploy_all_services_label_name:
+        required: false
+        type: string
+        description: "Name of the PR label that signals that all deployable services should be deployed, regardless of changed files"
+        default: ""
+      deploy_copy_mode:
+        required: false
+        type: string
+        description: "How service files should be copied to EC2. Supported values: full_service, deploy_paths"
+        default: "full_service"
+      deploy_paths_file:
+        required: false
+        type: string
+        description: "Relative path, inside each service, to the file containing deploy paths. Used when deploy_copy_mode is deploy_paths"
+        default: ".deploy/paths"
+
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      EC2_SSH_KNOWN_HOSTS:
+        required: false
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: cd-to-ec2-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  categorize-changed-services:
+    uses: ./.github/workflows/categorize-changed-services.yml
+    with:
+      environment: ${{ inputs.environment }}
+      source_dir_name: ${{ inputs.source_dir_name }}
+      deployment_file-or-dir_path: ${{ inputs.deployment_file_name }}
+      custom_service_file_pattern: ${{ inputs.custom_service_file_pattern }}
+      build_file_pattern: ${{ inputs.build_file_pattern }}
+      force_deploy_all_services: ${{ github.event_name == 'pull_request' && inputs.deploy_all_services_label_name != '' && contains(github.event.pull_request.labels.*.name, inputs.deploy_all_services_label_name) }}
+
+  prepare-ec2-targets:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - name: Validate EC2 targets
+        id: targets
+        env:
+          EC2_TARGETS_JSON: ${{ vars.EC2_TARGETS_JSON }}
+        run: |
+          set -euo pipefail;
+
+          if [ -z "${EC2_TARGETS_JSON}" ]; then
+            echo "Environment variable EC2_TARGETS_JSON is required." >&2;
+            exit 1;
+          fi
+
+          echo "${EC2_TARGETS_JSON}" | jq -e '
+            type == "object"
+            and (.include | type == "array")
+            and (.include | length > 0)
+            and all(.include[]; 
+              (.name | type == "string" and length > 0)
+              and (.host | type == "string" and length > 0)
+              and (.user | type == "string" and length > 0)
+              and (.target_dir | type == "string" and length > 0)
+              and (.security_group_id | type == "string" and length > 0)
+              and (.ssh_key_secret_name | type == "string" and length > 0)
+            )
+          ' > /dev/null;
+
+          while IFS= read -r target; do
+            name="$(echo "${target}" | jq -r '.name')";
+            host="$(echo "${target}" | jq -r '.host')";
+            user="$(echo "${target}" | jq -r '.user')";
+            target_dir="$(echo "${target}" | jq -r '.target_dir')";
+            security_group_id="$(echo "${target}" | jq -r '.security_group_id')";
+            ssh_key_secret_name="$(echo "${target}" | jq -r '.ssh_key_secret_name')";
+
+            case "${name}" in
+              *[!A-Za-z0-9._-]*)
+                echo "Invalid target name: ${name}" >&2;
+                exit 1;;
+            esac
+
+            case "${host}" in
+              *[!A-Za-z0-9._:-]*)
+                echo "Invalid host for target '${name}': ${host}" >&2;
+                exit 1;;
+            esac
+
+            case "${user}" in
+              *[!A-Za-z0-9._-]*)
+                echo "Invalid user for target '${name}': ${user}" >&2;
+                exit 1;;
+            esac
+
+            case "${target_dir}" in
+              *"'"*|*$'\n'*)
+                echo "Invalid target_dir for target '${name}': ${target_dir}" >&2;
+                echo "target_dir must not contain single quotes or newlines." >&2;
+                exit 1;;
+
+              /*)
+                ;;
+              *)
+                echo "Invalid target_dir for target '${name}': ${target_dir}" >&2;
+                echo "target_dir must be an absolute path." >&2;
+                exit 1;;
+            esac
+
+            case "${security_group_id}" in
+              sg-*)
+                ;;
+              *)
+                echo "Invalid security_group_id for target '${name}': ${security_group_id}" >&2;
+                exit 1;;
+            esac
+
+            case "${ssh_key_secret_name}" in
+              *[!A-Za-z0-9_]*)
+                echo "Invalid ssh_key_secret_name for target '${name}': ${ssh_key_secret_name}" >&2;
+                echo "Secret names should only contain letters, numbers and underscores." >&2;
+                exit 1;;
+
+              [A-Za-z_]*)
+                ;;
+              *)
+                echo "Invalid ssh_key_secret_name for target '${name}': ${ssh_key_secret_name}" >&2;
+                exit 1;;
+            esac
+          done < <(echo "${EC2_TARGETS_JSON}" | jq -c '.include[]')
+
+          # Convert the JSON string into a one liner JSON string
+          matrix="$(echo "${EC2_TARGETS_JSON}" | jq -c '.')";
+
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}";
+
+  copy-files-and-run:
+    needs:
+      - categorize-changed-services
+      - prepare-ec2-targets
+    if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY != '' || needs.categorize-changed-services.outputs.SERVICES_TO_REMOVE != '' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.prepare-ec2-targets.outputs.matrix) }}
+    env:
+      SERVICES_TO_DEPLOY: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_DEPLOY }}
+      SERVICES_TO_REMOVE: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_REMOVE }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      SRC_DIR: ${{ inputs.source_dir_name }}
+      DEPLOY_COPY_MODE: ${{ inputs.deploy_copy_mode }}
+      DEPLOY_PATHS_FILE: ${{ inputs.deploy_paths_file }}
+
+      EC2_TARGET_NAME: ${{ matrix.name }}
+      EC2_HOST: ${{ matrix.host }}
+      EC2_USER: ${{ matrix.user }}
+      EC2_TARGET_DIR: ${{ matrix.target_dir }}
+      AWS_SG_ID: ${{ matrix.security_group_id }}
+      EC2_SSH_PRIVATE_KEY: ${{ secrets[matrix.ssh_key_secret_name] }}
+
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4
+
+      - name: Validate deployment inputs
+        run: |
+          set -euo pipefail;
+
+          echo "Deploying to EC2 target: ${EC2_TARGET_NAME}";
+
+          if [ -z "${EC2_SSH_PRIVATE_KEY}" ]; then
+            echo "SSH private key secret '${{ matrix.ssh_key_secret_name }}' is empty or not available." >&2;
+            exit 1;
+          fi
+
+          case "${DEPLOY_COPY_MODE}" in
+            full_service|deploy_paths)
+              ;;
+
+            *)
+              echo "Invalid deploy_copy_mode: ${DEPLOY_COPY_MODE}" >&2;
+              echo "Supported values are: full_service, deploy_paths" >&2;
+              exit 1;;
+          esac
+
+          case "${DEPLOY_PATHS_FILE}" in
+            ""|/*|*../*|../*|*..)
+              echo "Invalid deploy_paths_file: ${DEPLOY_PATHS_FILE}" >&2;
+              echo "The deploy paths file must be a relative path inside each service." >&2;
+              exit 1;;
+          esac
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Get runner ip address
+        id: ip
+        run: |
+          set -euo pipefail;
+          echo "ipv4=$(curl -s https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT";
+
+      - name: Whitelist runner ip address
+        run: |
+          set -euo pipefail;
+
+          cidr="${{ steps.ip.outputs.ipv4 }}/32";
+
+          if aws ec2 authorize-security-group-ingress \
+            --group-id "${AWS_SG_ID}" \
+            --ip-permissions "[
+              {
+                \"IpProtocol\": \"tcp\",
+                \"FromPort\": 22,
+                \"ToPort\": 22,
+                \"IpRanges\": [
+                  {
+                    \"CidrIp\": \"${cidr}\",
+                    \"Description\": \"Temporary SSH access for GitHub Actions runner to ${EC2_TARGET_NAME}\"
+                  }
+                ]
+              }
+            ]"; then
+            echo "Authorized SSH access from ${cidr} to ${EC2_TARGET_NAME}.";
+          else
+            status=$?;
+
+            if aws ec2 describe-security-groups \
+              --group-ids "${AWS_SG_ID}" \
+              --query "SecurityGroups[0].IpPermissions[?IpProtocol=='tcp' && FromPort==\`22\` && ToPort==\`22\`].IpRanges[?CidrIp=='${cidr}'].CidrIp" \
+              --output text | grep -q "${cidr}"; then
+              echo "SSH access from ${cidr} is already authorized for ${EC2_TARGET_NAME}. Continuing.";
+            else
+              echo "Failed to authorize SSH access from ${cidr} to ${EC2_TARGET_NAME}." >&2;
+              exit "${status}";
+            fi
+          fi
+
+      - name: Configure SSH key
+        env:
+          EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail;
+
+          mkdir -p ~/.ssh;
+
+          printf '%s\n' "${EC2_SSH_PRIVATE_KEY}" > ~/.ssh/ec2_key;
+          chmod 600 ~/.ssh/ec2_key;
+
+          if [ -n "${EC2_SSH_KNOWN_HOSTS}" ]; then
+            echo "Using pinned SSH known_hosts from secret.";
+            printf '%s\n' "${EC2_SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts;
+          else
+            echo "No EC2_SSH_KNOWN_HOSTS secret provided. Falling back to ssh-keyscan.";
+            ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts;
+          fi
+
+          chmod 644 ~/.ssh/known_hosts;
+
+      - name: Remove deleted services from EC2
+        if: ${{ env.SERVICES_TO_REMOVE != '' }}
+        run: |
+          set -euo pipefail;
+
+          IFS=' ' read -r -a SERVICES <<< "${SERVICES_TO_REMOVE}";
+          for service in "${SERVICES[@]}"; do
+            echo "Removing service from ${EC2_TARGET_NAME}: ${service}";
+
+            ssh -i ~/.ssh/ec2_key "${EC2_USER}@${EC2_HOST}" "
+              set -e;
+
+              if [ -d '${EC2_TARGET_DIR}/${service}' ]; then
+                cd '${EC2_TARGET_DIR}/${service}';
+
+                if [ -f cli/stop.sh ]; then
+                  chmod +x cli/stop.sh;
+                  ./cli/stop.sh --cicd;
+                else
+                  echo 'No cli/stop.sh found for ${service}, skipping shutdown.';
+                fi
+
+                cd '${EC2_TARGET_DIR}';
+                rm -rf '${EC2_TARGET_DIR}/${service}';
+              else
+                echo 'Service directory not found for ${service}, skipping removal.';
+              fi
+            ";
+          done
+
+      - name: Copy files to EC2 and run
+        if: ${{ env.SERVICES_TO_DEPLOY != '' }}
+        run: |
+          set -euo pipefail;
+
+          deploy_full_service() {
+            local service="$1";
+
+            echo "Copying full service directory to ${EC2_TARGET_NAME}: ${service}";
+
+            rsync -az --delete \
+              -e "ssh -i ~/.ssh/ec2_key" \
+              "${SRC_DIR}/${service}/" \
+              "${EC2_USER}@${EC2_HOST}:${EC2_TARGET_DIR}/${service}/";
+          }
+
+          deploy_paths() (
+            local service="$1";
+            local service_dir="${SRC_DIR}/${service}";
+            local paths_file="${service_dir}/${DEPLOY_PATHS_FILE}";
+            local staging_dir;
+            local staging_service_dir;
+            local path;
+
+            if [ ! -f "${paths_file}" ]; then
+              echo "Deploy paths file not found for service '${service}': ${paths_file}" >&2;
+              exit 1;
+            fi
+
+            echo "Copying deploy paths to ${EC2_TARGET_NAME}: ${service}";
+            echo "Using deploy paths file: ${paths_file}";
+
+            staging_dir="$(mktemp -d)";
+            staging_service_dir="${staging_dir}/${service}";
+
+            # Runs when the deploy_paths() subshell exits, whether it succeeds or fails
+            trap 'rm -rf "${staging_dir}"' EXIT;
+
+            mkdir -p "${staging_service_dir}";
+
+            while IFS= read -r raw_path || [ -n "${raw_path}" ]; do
+              path="$(printf '%s' "${raw_path}" | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')";
+
+              case "${path}" in
+                ""|\#*)
+                  continue;;
+
+                /*|*../*|../*|*..)
+                  echo "Invalid deploy path '${path}' in ${paths_file}" >&2;
+                  exit 1;;
+              esac
+
+              if [ ! -e "${service_dir}/${path}" ]; then
+                echo "Deploy path '${path}' does not exist in service '${service}'" >&2;
+                exit 1;
+              fi
+
+              echo "Staging deploy path: ${path}";
+
+              (
+                cd "${service_dir}";
+                rsync -a --relative "${path}" "${staging_service_dir}/";
+              )
+            done < "${paths_file}";
+
+            rsync -az --delete \
+              -e "ssh -i ~/.ssh/ec2_key" \
+              "${staging_service_dir}/" \
+              "${EC2_USER}@${EC2_HOST}:${EC2_TARGET_DIR}/${service}/";
+          )
+
+          run_remote_start_script() {
+            local service="$1";
+
+            echo "Checking startup script on ${EC2_TARGET_NAME}: ${service}";
+
+            ssh -i ~/.ssh/ec2_key "${EC2_USER}@${EC2_HOST}" "
+              set -e;
+              cd '${EC2_TARGET_DIR}/${service}';
+
+              if [ -f cli/start.sh ]; then
+                chmod +x cli/start.sh;
+                ./cli/start.sh --cicd;
+              else
+                echo 'No cli/start.sh found for ${service}, skipping startup.';
+              fi
+            ";
+          }
+
+          IFS=' ' read -r -a SERVICES <<< "${SERVICES_TO_DEPLOY}";
+          for service in "${SERVICES[@]}"; do
+            if [ ! -d "${SRC_DIR}/${service}" ]; then
+              echo "Service directory does not exist: ${SRC_DIR}/${service}" >&2;
+              exit 1;
+            fi
+
+            echo "Deploying service to ${EC2_TARGET_NAME}: ${service}";
+
+            ssh -i ~/.ssh/ec2_key "${EC2_USER}@${EC2_HOST}" "
+              set -e;
+              mkdir -p '${EC2_TARGET_DIR}/${service}';
+            ";
+
+            case "${DEPLOY_COPY_MODE}" in
+              full_service)
+                deploy_full_service "${service}";;
+
+              deploy_paths)
+                deploy_paths "${service}";;
+            esac
+
+            run_remote_start_script "${service}";
+          done
+
+      - name: Revoke runner ip address
+        if: ${{ always() && steps.ip.outputs.ipv4 != '' }}
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${AWS_SG_ID}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.ip.outputs.ipv4 }}/32" || true;
