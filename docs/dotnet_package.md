@@ -6,9 +6,10 @@ There is 1 template.
 
 The CI template will:
 - Leave a comment on the pull request explaining how to signal a deployment.<br>If the trigger of the workflow is a `pull request opened`
-- Run static code analysis, on every trigger of the workflow, and send to an external static analysis tool (if configured)
-- Run automated tests, on every trigger of the workflow
-- Run code coverage, on every trigger of the workflow
+- For each specified target framework
+  - Run static code analysis, on every trigger of the workflow, and send to an external static analysis tool (if configured)
+  - Run automated tests, on every trigger of the workflow
+  - Run code coverage, on every trigger of the workflow
 - If the trigger of the workflow is a `pull request closed` and there was a `merge` to the specified `deployable branch`:
   - Checks if the pull request had the label assigned to a `major`, `minor` or `patch` version update
   - If it had any of those tags:
@@ -25,15 +26,16 @@ These templates will interact with the following scripts in your application rep
 
 | File path (relative to repo root) | Required | Expectation | Flags | Arguments | Example invocation |
 | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
-| `cli/lint.sh` | no | Run any static code analysis tools you want, inside Docker containers | `--cicd` | N/A | `sh cli/lint.sh --cicd` |
-| `cli/test.sh` | no | Run automated tests on your code, inside Docker containers | `--cicd`<br>`--unit`<br>`--integration`<br>`--e2e` | N/A | `sh cli/test.sh --unit --cicd` |
-| `cli/coverage.sh` | no | Generate test coverage report in lcov format, inside Docker containers | `--cicd` | N/A | `sh cli/coverage.sh --cicd` |
-| `cli/external_static_analysis.sh` | no | Send code data to external static code analyser tool | `--cicd` | N/A | `sh cli/external_static_analysis.sh --cicd` |
+| `cli/lint.sh` | no | Run any static code analysis tools you want, inside Docker containers | `--cicd`<br>`--target-lang` | N/A | `sh cli/lint.sh --cicd --target-lang net8.0` |
+| `cli/test.sh` | no | Run automated tests on your code, inside Docker containers | `--cicd`<br>`--target-lang`<br>`--unit`<br>`--integration`<br>`--e2e` | N/A | `sh cli/test.sh --unit --cicd --target-lang net8.0` |
+| `cli/coverage.sh` | no | Generate test coverage report in lcov format, inside Docker containers | `--cicd`<br>`--target-lang` | N/A | `sh cli/coverage.sh --cicd --target-lang net8.0` |
+| `cli/external_static_analysis.sh` | no | Send code data to external static code analyser tool | `--cicd`<br>`--target-lang` | N/A | `sh cli/external_static_analysis.sh --cicd --target-lang net8.0` |
 
 #### Detail about the script flags
 
 **All scripts**
 - `--cicd`: Signals to the script, in your application repository, that the invocation is coming from the CI/CD workflow.
+- `--target-lang`: The target framework to use with `dotnet` commands.
 
 **test.sh**
 - `--unit`: Run all relevant unit tests, if any
@@ -80,6 +82,7 @@ These templates expect the following `env vars` to be configured in your applica
 | `runner_group` | No | The Github hosted runner group that will be used to run this pipeline |
 | `runner_labels` | No | The Github hosted runner labels that will be used when choosing valid runners to run this pipeline |
 | `skip_heavy_tests` | No | If TRUE will skip integration and E2E tests. |
+| `target_frameworks` | No | JSON array with the target frameworks to run linter and tests against, in a matrix. Example: `["net8.0", "net10.0"]`. |
 
 ## Example of using these templates
 

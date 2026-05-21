@@ -55,6 +55,11 @@ on:
         required: false
         default: false
         description: "If TRUE will skip integration and E2E tests."
+      target_frameworks:
+        type: string
+        required: false
+        default: '["net8.0"]'
+        description: "JSON array with the target frameworks to run linter and tests against, in a matrix. Example: [\"net8.0\", \"net10.0\"]"
 
 defaults:
   run:
@@ -88,12 +93,17 @@ jobs:
           export pr_body=$(cat pr_body); gh pr comment "${PR_ID}" -b "$pr_body";
 
   linter-and-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        target_framework: ${{ fromJSON(inputs.target_frameworks) }}
     uses: ./.github/workflows/linter-tests.yml
     with:
       environment: ${{ inputs.environment }}
       runner_group: ${{ inputs.runner_group }}
       runner_labels: ${{ inputs.runner_labels }}
       skip_heavy_tests: ${{ inputs.skip_heavy_tests }}
+      target_lang: ${{ matrix.target_framework }}
     secrets: inherit
 
   determine-version-bump:
