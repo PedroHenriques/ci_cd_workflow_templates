@@ -19,6 +19,11 @@ on:
         required: false
         default: false
         description: "If TRUE will skip integration and E2E tests."
+      target_lang:
+        type: string
+        required: false
+        default: ""
+        description: "The version of the language that will be sent to your repository scripts."
 
 defaults:
   run:
@@ -28,37 +33,81 @@ jobs:
   linter-and-tests:
     runs-on: ${{ inputs.runner_group != '' && fromJSON(format('{{"group":"{0}","labels":{1}}}', inputs.runner_group, inputs.runner_labels)) || fromJSON(inputs.runner_labels) }}
     environment: ${{ inputs.environment }}
+    env:
+      TARGET_LANG: ${{ inputs.target_lang }}
     steps:
       - name: Clone repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Run project linter
-        run: if [ -f "./cli/lint.sh" ]; then chmod +x ./cli/lint.sh; ./cli/lint.sh --cicd; else echo "No lint.sh file found."; fi
-      
+        run: |
+          if [ -f "./cli/lint.sh" ]; then
+            chmod +x ./cli/lint.sh;
+
+            target_lang_args=();
+            if [ -n "${TARGET_LANG}" ]; then
+              target_lang_args+=(--target-lang "${TARGET_LANG}");
+            fi
+
+            ./cli/lint.sh --cicd "${target_lang_args[@]}";
+          else
+            echo "No lint.sh file found.";
+          fi
+
       - name: Run unit tests
-        run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --unit --cicd; else echo "No test.sh file found."; fi
+        run: |
+          if [ -f "./cli/test.sh" ]; then
+            chmod +x ./cli/test.sh;
+
+            target_lang_args=();
+            if [ -n "${TARGET_LANG}" ]; then
+              target_lang_args+=(--target-lang "${TARGET_LANG}");
+            fi
+
+            ./cli/test.sh --unit --cicd "${target_lang_args[@]}";
+          else
+            echo "No test.sh file found.";
+          fi
 
       - name: Run integration tests
         if: ${{ inputs.skip_heavy_tests == false }}
         env:
           ${{ insert }}: ${{ vars }}
           ${{ insert }}: ${{ secrets }}
-        run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --integration --cicd; else echo "No test.sh file found."; fi
+          TARGET_LANG: ${{ inputs.target_lang }}
+        run: |
+          if [ -f "./cli/test.sh" ]; then
+            chmod +x ./cli/test.sh;
+
+            target_lang_args=();
+            if [ -n "${TARGET_LANG}" ]; then
+              target_lang_args+=(--target-lang "${TARGET_LANG}");
+            fi
+
+            ./cli/test.sh --integration --cicd "${target_lang_args[@]}";
+          else
+            echo "No test.sh file found.";
+          fi
 
       - name: Run E2E tests
         if: ${{ inputs.skip_heavy_tests == false }}
         env:
           ${{ insert }}: ${{ vars }}
           ${{ insert }}: ${{ secrets }}
-        run: if [ -f "./cli/test.sh" ]; then chmod +x ./cli/test.sh; ./cli/test.sh --e2e --cicd; else echo "No test.sh file found."; fi
+          TARGET_LANG: ${{ inputs.target_lang }}
+        run: |
+          if [ -f "./cli/test.sh" ]; then
+            chmod +x ./cli/test.sh;
 
-      - name: Run test coverage
-        env:
-          TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
-          TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
-        run: if [ -f "./cli/coverage.sh" ]; then chmod +x ./cli/coverage.sh; ./cli/coverage.sh --cicd; else echo "No coverage.sh file found."; fi
+            target_lang_args=();
+            if [ -n "${TARGET_LANG}" ]; then
+              target_lang_args+=(--target-lang "${TARGET_LANG}");
+            fi
+
+            ./cli/test.sh --e2e --cicd "${target_lang_args[@]}";
+          else
+            echo "No test.sh file found.";
+          fi
 
       - name: Detect if an external static analysis tool is configured
         id: detect-static-analysis-tool
@@ -80,4 +129,17 @@ jobs:
           EXTERNAL_STATIC_ANALYSIS_HOST: ${{ vars.EXTERNAL_STATIC_ANALYSIS_HOST }}
           TEST_COVERAGE_DIR_PATH: ${{ vars.TEST_COVERAGE_DIR_PATH }}
           TEST_COVERAGE_FILE_NAME: ${{ vars.TEST_COVERAGE_FILE_NAME }}
-        run: if [ -f "./cli/external_static_analysis.sh" ]; then chmod +x ./cli/external_static_analysis.sh; ./cli/external_static_analysis.sh --cicd; else echo "No external_static_analysis.sh file found."; fi
+          TARGET_LANG: ${{ inputs.target_lang }}
+        run: |
+          if [ -f "./cli/external_static_analysis.sh" ]; then
+            chmod +x ./cli/external_static_analysis.sh;
+
+            target_lang_args=();
+            if [ -n "${TARGET_LANG}" ]; then
+              target_lang_args+=(--target-lang "${TARGET_LANG}");
+            fi
+
+            ./cli/external_static_analysis.sh --cicd "${target_lang_args[@]}";
+          else
+            echo "No external_static_analysis.sh file found.";
+          fi
