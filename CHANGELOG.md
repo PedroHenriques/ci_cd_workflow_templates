@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-05-21
+
+### Changed
+
+- `linter-tests.yml`: Support receiving an optional input `target_lang`, containing the version of the language to use, which will be sent to all scripts, in the application repository, under `--target-lang` (**Refs**: `main` and `v1`)
+- `ci_dotnet_package.yml`: Support receiving an optional input `target_frameworks`, containing the versions of the language to use for linter and tests. A run of the `linter-tests` template will be made for each version. (**Refs**: `main` and `v1`)
+
 ## 2026-05-14
 
 ### Added
