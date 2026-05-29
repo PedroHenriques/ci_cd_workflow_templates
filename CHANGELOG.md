@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-05-29
+
+### Changed
+
+- `repo_maintenance.yml`: Make the template repository sync job optional by allowing `template_type` to be omitted. When omitted or empty, only the dependency update job runs. (**Refs**: `main` and `v1`)
+- `categorize-changed-services.yml`: Bumped version of `tj-actions/changed-files` from `45` to `47.0.6`. (**Refs**: `main` and `v1`)
+- `ci_docker.yml`: Make all variables available to `jobs.build-and-push.steps.build-artifacts`. (**Refs**: `main` and `v1`)
+
 ## 2026-05-21
 
 ### Changed
