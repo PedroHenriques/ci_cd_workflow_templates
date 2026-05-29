@@ -3,9 +3,10 @@ on:
   workflow_call:
     inputs:
       template_type:
-        required: true
+        required: false
         type: string
-        description: "One of: 'dotnet' | 'javascript_fe' | 'golang' | 'java'"
+        default: ""
+        description: "Optional. One of: 'dotnet' | 'javascript_fe' | 'golang' | 'java'. If omitted, the template repository sync job is skipped"
       pr_reviewers:
         required: true
         type: string
@@ -17,6 +18,7 @@ defaults:
 
 jobs:
   template-repo-sync:
+    if: ${{ inputs.template_type != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
