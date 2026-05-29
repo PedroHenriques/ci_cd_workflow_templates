@@ -113,6 +113,7 @@ jobs:
         id: build-artifacts
         if: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD != '' }}
         env:
+          ${{ insert }}: ${{ vars }}
           SERVICES_TO_BUILD: ${{ needs.categorize-changed-services.outputs.SERVICES_TO_BUILD }}
         run: >-
           SERVICES_TO_BUILD=$(echo "${SERVICES_TO_BUILD}" | tr '[:upper:]' '[:lower:]');

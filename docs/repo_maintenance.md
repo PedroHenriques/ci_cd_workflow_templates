@@ -5,7 +5,7 @@
 There is 1 template.
 
 The template will:
-- Syncronize the application repository with a template  repository:
+- Optionally synchronize the application repository with a template repository, when a `template_type` input is provided:
   - For `.Net applications` it will sync with the [.Net template repository](https://github.com/PedroHenriques/dotnet_ms_template)
   - For `Golang applications` it will sync with the [Golang template repository](https://github.com/PedroHenriques/golang_ms_template)
   - For `Frontend Javascript applications` it will sync with the [FE Javascript template repository](https://github.com/PedroHenriques/javascript_fe_template)
@@ -40,7 +40,7 @@ These templates expect the following `secrets` to be configured in your applicat
 | Name | Required | Description |
 | ----------- | ----------- | ----------- |
 | `OWN_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to open pull requests in your application repository |
-| `TEMPLATE_REPO_TOKEN` | Yes | A personal access token (PAT) with permissions to read the template repository.<br>More details available [here](https://github.com/marketplace/actions/actions-template-sync#3-using-a-pat) |
+| `TEMPLATE_REPO_TOKEN` | Only when `template_type` is provided | A personal access token (PAT) with permissions to read the template repository.<br>More details available [here](https://github.com/marketplace/actions/actions-template-sync#3-using-a-pat) |
 
 ### Environment Variables
 
@@ -48,7 +48,7 @@ These templates don't require any environment variables to be configured in your
 
 ### Configuration file
 
-These templates expect a configuration file to exist in the path `setup/workflows/.templatesyncignore`, of your application repository, with the paths to ignore for the purpose of the synchronization with the template repository.<br>
+When `template_type` is provided, these templates expect a configuration file to exist in the path `setup/workflows/.templatesyncignore`, of your application repository, with the paths to ignore for the purpose of the synchronization with the template repository.<br>
 More information about the schema of this file is available [here](https://github.com/marketplace/actions/actions-template-sync#ignore-files).
 
 ## Repo maintenance template
@@ -56,7 +56,7 @@ More information about the schema of this file is available [here](https://githu
 ### Inputs
 | Name | Required | Description |
 | ----------- | ----------- | ----------- |
-| `template_type` | Yes | The type template repository to sync with.<br>One of: `dotnet` \| `javascript_fe` \| `golang` \| `java` |
+| `template_type` | No | The type of the template repository to sync with.<br>One of: `dotnet` \| `javascript_fe` \| `golang` \| `java`.<br>If omitted or empty, the template repository sync job is skipped. |
 | `pr_reviewers` | Yes | Comma separated list of pull request reviewers that should be added to any pull requests opened |
 
 ## Example of using these templates
@@ -109,3 +109,27 @@ This will trigger the `repo_maintenance.yml` template (on the ref `v1`)
 The behaviour for the pipeline is:
 - Check if the files in the template repository have any differences to the ones in your application repository, with the exception of the files and directories marked in the file `setup/workflows/.templatesyncignore`.<br>If there are differences, a pull request will be opened in your application repository and the list of users provided as inputs will be added as reviewers
 - Invoke the `cli/dependencies_update.sh` script, in your application repository.<br>If any dependency was updated, a pull request will be opened in your application repository and the list of users provided as inputs will be added as reviewers
+
+### Example without template repository sync
+
+To run only the dependency update job, omit the `template_type` input:
+
+```
+name: maintenance
+on:
+  schedule:
+  - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  maintenance:
+    uses: PedroHenriques/ci_cd_workflow_templates/.github/workflows/repo_maintenance.yml@v1
+    with:
+      pr_reviewers: PedroHenriques
+    secrets: inherit
+```
+
+In this mode:
+- The `template-repo-sync` job is skipped.
+- The `TEMPLATE_REPO_TOKEN` secret is not required.
+- The `setup/workflows/.templatesyncignore` file is not required.

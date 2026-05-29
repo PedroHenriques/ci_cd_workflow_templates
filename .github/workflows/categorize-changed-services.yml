@@ -55,7 +55,7 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@v45
+        uses: tj-actions/changed-files@v47.0.6
         with:
           separator: ','
           files: ${{ inputs.source_dir_name }}/**
