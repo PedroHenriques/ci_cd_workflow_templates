@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Clone repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Run project linter
         run: |
