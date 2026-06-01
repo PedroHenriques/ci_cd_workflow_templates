@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-06-01
+
+### Changed
+
+- `linter-tests.yml`: Change **Clone repo** step to fetch all repository refs. This is needed to avoid Sonar issues with missig refs on analysis. (**Refs**: `main` and `v1`)
+
 ## 2026-05-29
 
 ### Changed
