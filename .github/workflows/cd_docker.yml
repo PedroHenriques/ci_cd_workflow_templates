@@ -62,10 +62,10 @@ jobs:
       IDP_REPO_REL_PATH: 'idp_repo_clone' # Needs to be the same as the 'steps.Clone IDP repo.with.path' property
     steps:
       - name: Clone repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Clone IDP repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ vars.IDP_REPO_NAME }}
           token: ${{ secrets.IDP_REPO_TOKEN }}
