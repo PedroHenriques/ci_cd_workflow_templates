@@ -67,7 +67,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Clone repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.OWN_REPO_TOKEN }}
 
@@ -105,7 +105,7 @@ jobs:
       VERSION_BUMP_TYPE: ${{ steps.determine-version-bump-type.outputs.VERSION_BUMP_TYPE }}
     steps:
       - name: Clone repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Determine version bump type
         id: determine-version-bump-type
@@ -149,7 +149,7 @@ jobs:
       VERSION_BUMP_TYPE: ${{ needs.determine-version-bump.outputs.VERSION_BUMP_TYPE }}
     steps:
       - name: Clone repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.OWN_REPO_TOKEN }}
 

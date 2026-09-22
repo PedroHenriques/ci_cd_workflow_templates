@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 2026-09-22
+
+### Changed
+
+- `actions/checkout`: Changed all uses from `v4` to `v7`.  (**Refs**: `main` and `v1`)
+
 ## 2026-06-01
 
 ### Changed
