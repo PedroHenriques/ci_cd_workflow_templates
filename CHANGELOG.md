@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `actions/checkout`: Changed all uses from `v4` to `v7`.
+- `actions/checkout`: Changed all uses from `v4` to `v7`.  (**Refs**: `main` and `v1`)
 
 ## 2026-06-01
 
