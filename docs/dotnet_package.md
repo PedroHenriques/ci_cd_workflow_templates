@@ -148,3 +148,13 @@ The behaviour for the pipeline is:
 - The `sharedLibs` service is considered a shared service, since it is not deployable and has a `*.csproj` file (input `custom_service_file_pattern`), so if it has changes all deployable services will be marked for deploy (even if they had no file changes)
 
 **NOTE:** In this example we use an empty file named `build.txt` to identify the services to build and deploy.
+
+## A Note on Nuget's Trusted Publishing
+
+Nuget has released a new publish authentication workflow called `Trusted Publishing` and has made changes to the current `API Key` authentication system: [dev blog](https://devblogs.microsoft.com/dotnet/strengthening-nuget-supply-chain-security-reducing-api-key-lifetime/).
+
+There is already a new, backwards compatible, version of this workflow that supports both `API Keys` and `Trusted Publishing`, however there are reported issues with Nuget's new authentication flow when reusable templates are involved:
+- [#6](https://github.com/NuGet/login/issues/6)
+- [#24](https://github.com/NuGet/login/issues/24)
+
+Until there is a solution to the issue I will not release the version of the template that adds support for `Trusted Publishing`.
